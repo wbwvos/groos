@@ -93,10 +93,8 @@ staples:
 **config/meals.yaml** — maaltijdenlijst voor AI suggesties:
 ```yaml
 meals:
-  - name: pasta carbonara
-    servings: 2
-  - name: rijst met groenten
-    servings: 2
+  - naam: pasta carbonara
+  - naam: rijst met groenten
 ```
 
 ## Toekomstige features (buiten MVP scope)

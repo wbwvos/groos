@@ -2,10 +2,6 @@
   "name": "groos",
   "version": "1.0.0",
   "description": "",
-  "main": "index.js",
-  "directories": {
-    "doc": "docs"
-  },
   "scripts": {
     "cli": "tsx src/cli.ts",
     "mcp": "tsx src/mcp.ts",
