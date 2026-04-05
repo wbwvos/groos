@@ -1,15 +1,13 @@
 import { describe, it, expect, vi } from 'vitest'
 
 vi.mock('@anthropic-ai/sdk', () => ({
-  default: function() {
-    return {
-      messages: {
-        create: vi.fn().mockResolvedValue({
-          content: [{ type: 'text', text: 'pasta bolognese\ngroentecurry\nomelet met groenten' }]
-        })
-      }
+  default: vi.fn(function(this: any) {
+    this.messages = {
+      create: vi.fn().mockResolvedValue({
+        content: [{ type: 'text', text: 'pasta bolognese\ngroentecurry\nomelet met groenten' }]
+      })
     }
-  }
+  })
 }))
 
 import { suggestMeals } from './meals.js'
