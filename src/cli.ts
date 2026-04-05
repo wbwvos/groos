@@ -4,6 +4,16 @@ import { createPicnicService } from './picnic.js'
 const [,, command, ...args] = process.argv
 
 async function main() {
+  if (!command) {
+    console.log(`Gebruik:
+  npm run cli search <zoekterm>
+  npm run cli add <product-id> [aantal]
+  npm run cli basket
+  npm run cli delivery
+  npm run cli set-delivery <slot-id>`)
+    return
+  }
+
   const picnic = createPicnicService()
   await picnic.login()
 
@@ -18,9 +28,11 @@ async function main() {
     }
 
     case 'add': {
-      const [productId, qty] = args
+      const [productId, qtyStr] = args
       if (!productId) { console.error('Gebruik: npm run cli add <product-id> [aantal]'); process.exit(1) }
-      await picnic.addToBasket(productId, qty ? parseInt(qty) : 1)
+      const qty = qtyStr ? parseInt(qtyStr, 10) : 1
+      if (Number.isNaN(qty) || qty < 1) { console.error('Aantal moet een positief getal zijn'); process.exit(1) }
+      await picnic.addToBasket(productId, qty)
       console.log(`Toegevoegd: ${productId}`)
       break
     }
@@ -47,13 +59,9 @@ async function main() {
     }
 
     default:
-      console.log(`Gebruik:
-  npm run cli search <zoekterm>
-  npm run cli add <product-id> [aantal]
-  npm run cli basket
-  npm run cli delivery
-  npm run cli set-delivery <slot-id>`)
+      console.error(`Onbekend commando: ${command}`)
+      process.exit(1)
   }
 }
 
-main().catch(err => { console.error(err.message); process.exit(1) })
+main().catch(err => { console.error(String(err)); process.exit(1) })
