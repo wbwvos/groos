@@ -34,6 +34,11 @@ describe('PicnicService', () => {
     service = new PicnicService('test@test.nl', 'wachtwoord')
   })
 
+  it('calls auth.login with correct credentials', async () => {
+    await service.login()
+    expect((service as any).client.auth.login).toHaveBeenCalledWith('test@test.nl', 'wachtwoord')
+  })
+
   it('can search for products', async () => {
     await service.login()
     const results = await service.search('havermelk')

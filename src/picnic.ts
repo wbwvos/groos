@@ -38,7 +38,7 @@ export class PicnicService {
     }))
   }
 
-  async getBasket(): Promise<any> {
+  async getBasket(): Promise<Awaited<ReturnType<typeof this.client.cart.getCart>>> {
     return this.client.cart.getCart()
   }
 
