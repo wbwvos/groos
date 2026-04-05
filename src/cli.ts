@@ -6,6 +6,8 @@ const [,, command, ...args] = process.argv
 async function main() {
   if (!command) {
     console.log(`Gebruik:
+  npm run cli 2fa-request          # vraag SMS-code aan
+  npm run cli 2fa-verify <code>    # verifieer SMS-code
   npm run cli search <zoekterm>
   npm run cli add <product-id> [aantal]
   npm run cli basket
@@ -15,6 +17,24 @@ async function main() {
   }
 
   const picnic = createPicnicService()
+
+  // 2FA commando's vereisen login maar geen 2FA verificatie
+  if (command === '2fa-request') {
+    await picnic.login()
+    await picnic.request2FA()
+    console.log('SMS-code verstuurd. Gebruik: npm run cli 2fa-verify <code>')
+    return
+  }
+
+  if (command === '2fa-verify') {
+    const [code] = args
+    if (!code) { console.error('Gebruik: npm run cli 2fa-verify <code>'); process.exit(1) }
+    await picnic.login()
+    await picnic.verify2FA(code)
+    console.log('2FA verificatie geslaagd!')
+    return
+  }
+
   await picnic.login()
 
   switch (command) {

@@ -1,5 +1,19 @@
 import PicnicClient from 'picnic-api'
 import 'dotenv/config'
+import { readFileSync, writeFileSync, existsSync } from 'fs'
+import { resolve } from 'path'
+
+const SESSION_FILE = resolve(process.cwd(), '.picnic-session')
+
+function loadAuthKey(): string | undefined {
+  if (existsSync(SESSION_FILE)) {
+    try { return readFileSync(SESSION_FILE, 'utf8').trim() } catch { /* ignore */ }
+  }
+}
+
+function saveAuthKey(key: string) {
+  writeFileSync(SESSION_FILE, key, 'utf8')
+}
 
 export interface Product {
   id: string
@@ -19,13 +33,16 @@ export class PicnicService {
   private password: string
 
   constructor(username: string, password: string) {
-    this.client = new PicnicClient()
+    const savedKey = loadAuthKey()
+    this.client = new PicnicClient(savedKey ? { authKey: savedKey } : undefined)
     this.username = username
     this.password = password
   }
 
   async login(): Promise<void> {
-    await this.client.auth.login(this.username, this.password)
+    if (loadAuthKey()) return // sessie nog geldig
+    const result = await this.client.auth.login(this.username, this.password)
+    saveAuthKey(result.authKey)
   }
 
   async search(query: string): Promise<Product[]> {
@@ -53,6 +70,15 @@ export class PicnicService {
 
   async setDeliverySlot(slotId: string): Promise<void> {
     await this.client.cart.setDeliverySlot(slotId)
+  }
+
+  async request2FA(): Promise<void> {
+    await this.client.auth.generate2FACode('SMS')
+  }
+
+  async verify2FA(code: string): Promise<void> {
+    const result = await this.client.auth.verify2FACode(code)
+    saveAuthKey(result.authKey)
   }
 }
 
