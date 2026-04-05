@@ -30,6 +30,28 @@ groos/
 └── .env                 # credentials (nooit committen)
 ```
 
+## MCP registreren in Claude Code
+
+`tsx` zit alleen als lokale dev dependency — gebruik het volledige pad:
+
+```bash
+claude mcp add groos -- /home/sledder/projects/groos/node_modules/.bin/tsx /home/sledder/projects/groos/src/mcp.ts
+```
+
+Vereiste `.env` variabelen (kopieer van `.env.example`):
+- `PICNIC_USERNAME`
+- `PICNIC_PASSWORD`
+- `ANTHROPIC_API_KEY`
+
+## CLI testen
+
+```bash
+source ~/.nvm/nvm.sh && nvm use 22
+npm run cli search havermelk
+npm run cli basket
+npm run cli delivery
+```
+
 ## Design doc
 
 Zie `docs/plans/2026-04-05-groos-design.md` voor het volledige design.
