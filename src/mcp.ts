@@ -22,6 +22,17 @@ try {
 
 function authGuard(): string | null { return setupError }
 
+function parseBasketItems(basket: any): Array<{ id: string; name: string; qty: number; price: number }> {
+  const items: Array<{ id: string; name: string; qty: number; price: number }> = []
+  for (const line of basket?.items ?? []) {
+    for (const article of line.items ?? []) {
+      const qty = article.decorators?.find((d: any) => d.type === 'QUANTITY')?.quantity ?? 1
+      items.push({ id: article.id ?? '?', name: article.name ?? '', qty, price: article.price })
+    }
+  }
+  return items
+}
+
 mcp.addTool({
   name: 'search_product',
   description: 'Zoek producten in Picnic op naam',
@@ -87,13 +98,7 @@ mcp.addTool({
     try {
       const authErr = authGuard(); if (authErr) return authErr
       const basket = await picnic.getBasket()
-      const items: Array<{ id: string; name: string; qty: number; price: number }> = []
-      for (const line of (basket as any).items ?? []) {
-        for (const article of line.items ?? []) {
-          const qty = article.decorators?.find((d: any) => d.type === 'QUANTITY')?.quantity ?? 1
-          items.push({ id: article.id ?? '?', name: article.name, qty, price: article.price })
-        }
-      }
+      const items = parseBasketItems(basket)
       if (items.length === 0) return 'Mandje is leeg.'
       const total = items.reduce((sum, i) => sum + i.price * i.qty, 0)
       const lines = items.map(i => `ID: ${i.id} | ${i.qty}x ${i.name.padEnd(40)} €${(i.price / 100).toFixed(2)}`)
@@ -129,13 +134,7 @@ mcp.addTool({
     try {
       const authErr = authGuard(); if (authErr) return authErr
       const [minimum, basket] = await Promise.all([picnic.getMinimumOrderValue(), picnic.getBasket()])
-      const items: Array<{ price: number; qty: number }> = []
-      for (const line of (basket as any).items ?? []) {
-        for (const article of line.items ?? []) {
-          const qty = article.decorators?.find((d: any) => d.type === 'QUANTITY')?.quantity ?? 1
-          items.push({ price: article.price, qty })
-        }
-      }
+      const items = parseBasketItems(basket)
       const total = items.reduce((sum, i) => sum + i.price * i.qty, 0)
       const eligible = total >= minimum
       return [
@@ -201,7 +200,7 @@ mcp.addTool({
 
 mcp.addTool({
   name: 'get_weekly_plan',
-  description: `Haal de weekplanning op: vaste boodschappen met productnamen en verpakkingseenheden, bekende maaltijden als inspiratie, en het huishouden. Gebruik deze info om hoeveelheden te controleren op redelijkheid voor het huishouden (bijv. 6x "1 kilo" bananen is te veel voor 2 personen) en om maaltijdsuggesties te doen voordat je iets toevoegt aan het mandje.`,
+  description: 'Geeft het weekoverzicht: mandjecheck, gezinsinfo, staples met product-IDs, maaltijdsuggesties, basisvoorraadremindar en concrete volgende stappen. Gebruik dit altijd als startpunt van een nieuwe boodschappenronde.',
   parameters: z.object({}),
   execute: async () => {
     try {
@@ -222,13 +221,7 @@ mcp.addTool({
       lines.push(`## Weekoverzicht – ${dateStr}\n`)
 
       // Basket section
-      const basketItems: Array<{ price: number; qty: number }> = []
-      for (const line of (basket as any).items ?? []) {
-        for (const article of line.items ?? []) {
-          const qty = article.decorators?.find((d: any) => d.type === 'QUANTITY')?.quantity ?? 1
-          basketItems.push({ price: article.price, qty })
-        }
-      }
+      const basketItems = parseBasketItems(basket)
       const basketTotal = basketItems.reduce((sum, i) => sum + i.price * i.qty, 0)
       const basketItemCount = basketItems.reduce((sum, i) => sum + i.qty, 0)
 
@@ -246,8 +239,13 @@ mcp.addTool({
 
       // Vaste boodschappen section
       lines.push('### Vaste boodschappen')
-      for (const staple of staples) {
-        const results = await picnic.search(staple.name)
+      const stapleResults = await Promise.all(
+        staples.map(async s => {
+          const results = await picnic.search(s.name)
+          return { staple: s, results }
+        })
+      )
+      for (const { staple, results } of stapleResults) {
         if (results.length > 0) {
           const p = results[0]
           lines.push(`- ${staple.name} → ${p.id} | ${p.name}${p.unitQuantity ? ` [${p.unitQuantity}]` : ''} | €${(p.price / 100).toFixed(2)} | geconfigureerd: ${staple.quantity}x`)
