@@ -7,6 +7,7 @@ import { z } from 'zod'
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const configDir = resolve(__dirname, '../config')
 
+// StapleSchema is used only for its inferred Staple type; actual parsing happens in parseStapleString
 const StapleSchema = z.object({ name: z.string(), quantity: z.number() })
 const StaplesConfigSchema = z.object({ staples: z.array(z.string()) })
 const MealsConfigSchema = z.object({ meals: z.array(z.object({ naam: z.string() })) })
@@ -16,11 +17,16 @@ export type Staple = z.infer<typeof StapleSchema>
 export type Household = z.infer<typeof HouseholdSchema>['household']
 
 export function parseStapleString(item: string): Staple {
+  // Guard for malformed Nx prefix (no space)
+  if (/^\d+x\S/.test(item)) {
+    throw new Error(`Ongeldig staples formaat: "${item}". Gebruik "2x havermelk" of "havermelk".`)
+  }
+
   const match = item.match(/^(\d+)x\s+(.+)$/)
   if (match) {
     return { quantity: parseInt(match[1], 10), name: match[2] }
   }
-  return { quantity: 1, name: item }
+  return { quantity: 1, name: item.trim() }
 }
 
 export async function loadStaples(): Promise<Staple[]> {

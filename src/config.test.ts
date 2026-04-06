@@ -40,4 +40,15 @@ describe('parseStapleString', () => {
     const result = parseStapleString('12x eieren')
     expect(result).toEqual({ quantity: 12, name: 'eieren' })
   })
+
+  it('trims whitespace in fallback branch', () => {
+    const result = parseStapleString('  bananen  ')
+    expect(result).toEqual({ quantity: 1, name: 'bananen' })
+  })
+
+  it('throws an error for malformed Nx prefix (no space)', () => {
+    expect(() => parseStapleString('2xhavermelk')).toThrow(
+      'Ongeldig staples formaat: "2xhavermelk". Gebruik "2x havermelk" of "havermelk".'
+    )
+  })
 })
