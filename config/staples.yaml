@@ -1,11 +1,6 @@
 staples:
-  - name: havermelk
-    quantity: 2
-  - name: havermout
-    quantity: 1
-  - name: bananen
-    quantity: 1
-  - name: appels
-    quantity: 1
-  - name: chips
-    quantity: 1
+  - 2x havermelk
+  - 1x havermout
+  - 1x bananen
+  - 1x appels
+  - 1x chips
