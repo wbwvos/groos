@@ -11,7 +11,7 @@ const configDir = resolve(__dirname, '../config')
 const StapleSchema = z.object({ name: z.string(), quantity: z.number() })
 const StaplesConfigSchema = z.object({ staples: z.array(z.string()) })
 const MealsConfigSchema = z.object({ meals: z.array(z.object({ naam: z.string() })) })
-const HouseholdSchema = z.object({ household: z.object({ adults: z.number(), children: z.number() }) })
+const HouseholdSchema = z.object({ household: z.object({ adults: z.number(), children: z.number(), budget_preference: z.enum(['huismerk', 'premium', 'geen']).default('geen') }) })
 
 export type Staple = z.infer<typeof StapleSchema>
 export type Household = z.infer<typeof HouseholdSchema>['household']

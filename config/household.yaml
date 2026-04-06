@@ -1,3 +1,4 @@
 household:
   adults: 2
   children: 0
+  budget_preference: geen   # 'huismerk' | 'premium' | 'geen'

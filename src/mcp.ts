@@ -210,7 +210,7 @@ mcp.addTool({
 
       const lines: string[] = []
 
-      lines.push(`Huishouden: ${household.adults} volwassene(n), ${household.children} kind(eren)\n`)
+      lines.push(`Huishouden: ${household.adults} volwassene(n), ${household.children} kind(eren) | Budgetvoorkeur: ${household.budget_preference}\n`)
 
       lines.push('Vaste boodschappen (uit config):')
       for (const staple of staples) {
