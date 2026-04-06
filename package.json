@@ -5,7 +5,7 @@
   "keywords": ["mcp", "picnic", "groceries", "claude", "boodschappen"],
   "repository": {
     "type": "git",
-    "url": "https://github.com/sledder/groos"
+    "url": "https://github.com/wbwvos/groos"
   },
   "scripts": {
     "cli": "tsx src/cli.ts",
