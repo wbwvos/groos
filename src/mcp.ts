@@ -152,7 +152,11 @@ mcp.addTool({
   execute: async () => {
     try {
       const authErr = authGuard(); if (authErr) return authErr
-      const [minimum, basket] = await Promise.all([picnic.getMinimumOrderValue(), picnic.getBasket()])
+      const [minimum, basket, address] = await Promise.all([
+        picnic.getMinimumOrderValue(),
+        picnic.getBasket(),
+        picnic.getDeliveryAddress(),
+      ])
       const items = parseBasketItems(basket)
       const total = items.reduce((sum, i) => sum + i.price * i.qty, 0)
       const eligible = total >= minimum
@@ -163,6 +167,7 @@ mcp.addTool({
         `Minimumbedrag: €${(minimum / 100).toFixed(2)}`,
         `Mandje totaal: €${(total / 100).toFixed(2)}`,
         eligible ? '✓ Minimum gehaald — bestelling kan geplaatst worden.' : `✗ Nog €${((minimum - total) / 100).toFixed(2)} nodig om het minimum te halen.`,
+        `Bezorgadres: ${address}`,
       ]
 
       if (unavailableItems.length > 0) {

@@ -131,6 +131,17 @@ export class PicnicService {
     await this.client.cart.confirmOrder(cart.id)
   }
 
+  async getDeliveryAddress(): Promise<string> {
+    try {
+      const user = await this.client.user.getUserDetails()
+      const a = user.address
+      const ext = a.house_number_ext ? ` ${a.house_number_ext}` : ''
+      return `${a.street} ${a.house_number}${ext}, ${a.postcode} ${a.city}`
+    } catch {
+      return '(adres niet beschikbaar)'
+    }
+  }
+
   async getWeeklyRecipes(): Promise<Recipe[]> {
     const now = Date.now()
     if (this.recipesCache && now - this.recipesCache.fetchedAt < this.CACHE_TTL_MS) {
