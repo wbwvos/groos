@@ -87,16 +87,16 @@ mcp.addTool({
     try {
       const authErr = authGuard(); if (authErr) return authErr
       const basket = await picnic.getBasket()
-      const items: Array<{ name: string; qty: number; price: number }> = []
+      const items: Array<{ id: string; name: string; qty: number; price: number }> = []
       for (const line of (basket as any).items ?? []) {
         for (const article of line.items ?? []) {
           const qty = article.decorators?.find((d: any) => d.type === 'QUANTITY')?.quantity ?? 1
-          items.push({ name: article.name, qty, price: article.price })
+          items.push({ id: article.id, name: article.name, qty, price: article.price })
         }
       }
       if (items.length === 0) return 'Mandje is leeg.'
       const total = items.reduce((sum, i) => sum + i.price * i.qty, 0)
-      const lines = items.map(i => `${i.qty}x ${i.name.padEnd(40)} €${(i.price / 100).toFixed(2)}`)
+      const lines = items.map(i => `ID: ${i.id} | ${i.qty}x ${i.name.padEnd(40)} €${(i.price / 100).toFixed(2)}`)
       lines.push('─'.repeat(55))
       lines.push(`Totaal: €${(total / 100).toFixed(2)}`)
       return lines.join('\n')
