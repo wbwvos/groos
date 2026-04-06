@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { loadStaples, loadMeals, parseStapleString, saveStaples } from './config.js'
 
 describe('loadStaples', () => {
@@ -54,8 +54,12 @@ describe('parseStapleString', () => {
 })
 
 describe('saveStaples roundtrip', () => {
+  let original: Awaited<ReturnType<typeof loadStaples>>
+
+  beforeEach(async () => { original = await loadStaples() })
+  afterEach(async () => { await saveStaples(original) })
+
   it('saves staples and loads them back unchanged', async () => {
-    const original = await loadStaples()
     const testStaples = [
       { name: 'havermelk', quantity: 3 },
       { name: 'bananen', quantity: 2 },
@@ -64,7 +68,5 @@ describe('saveStaples roundtrip', () => {
     await saveStaples(testStaples)
     const loaded = await loadStaples()
     expect(loaded).toEqual(testStaples)
-    // Restore original
-    await saveStaples(original)
   })
 })

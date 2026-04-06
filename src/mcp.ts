@@ -236,7 +236,7 @@ mcp.addTool({
 
 mcp.addTool({
   name: 'manage_staples',
-  description: 'Voeg, verwijder of wijzig vaste wekelijkse boodschappen. Dit persists in config/staples.yaml.',
+  description: 'Voeg, verwijder of wijzig vaste wekelijkse boodschappen. Wijzigingen worden opgeslagen in config/staples.yaml.',
   parameters: z.object({
     action: z.enum(['add', 'remove', 'set_quantity']).describe('Actie: add (toevoegen), remove (verwijderen), set_quantity (aantal wijzigen)'),
     name: z.string().describe('Naam van het product, bijv. "havermelk"'),
@@ -248,7 +248,7 @@ mcp.addTool({
       const lowerName = name.toLowerCase()
 
       if (action === 'add') {
-        if (!quantity) return `Aantal is verplicht bij toevoegen. Voorbeeld: name="havermelk", quantity=2`
+        if (quantity === undefined) return `Aantal is verplicht bij toevoegen. Voorbeeld: name="havermelk", quantity=2`
         const exists = staples.some(s => s.name.toLowerCase() === lowerName)
         if (exists) return `'${name}' staat al in de staples. Gebruik set_quantity om het aantal te wijzigen.`
         staples.push({ name, quantity })
@@ -259,7 +259,7 @@ mcp.addTool({
         staples.splice(idx, 1)
         await saveStaples(staples)
       } else if (action === 'set_quantity') {
-        if (!quantity) return `Aantal is verplicht bij wijzigen. Voorbeeld: name="havermelk", quantity=3`
+        if (quantity === undefined) return `Aantal is verplicht bij wijzigen. Voorbeeld: name="havermelk", quantity=3`
         const idx = staples.findIndex(s => s.name.toLowerCase() === lowerName)
         if (idx === -1) {
           // Treat as add
