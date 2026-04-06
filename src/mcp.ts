@@ -45,9 +45,17 @@ mcp.addTool({
       const authErr = authGuard(); if (authErr) return authErr
       const results = await picnic.search(query)
       if (results.length === 0) return 'Geen producten gevonden.'
-      return results.slice(0, limit).map(p =>
-        `ID: ${p.id} | €${(p.price / 100).toFixed(2)} | ${p.name}${p.unitQuantity ? ` [${p.unitQuantity}]` : ''}`
-      ).join('\n')
+      return results.slice(0, limit).map(p => {
+        const labels: string[] = []
+        for (const d of (p.decorators ?? [])) {
+          if (d?.type === 'LABEL' && d.text) labels.push(`[${d.text}]`)
+          if (d?.type === 'PRICE' && typeof d.display_price === 'number' && d.display_price < p.price) {
+            labels.push(`[aanbieding: €${(d.display_price / 100).toFixed(2)}]`)
+          }
+        }
+        const labelStr = labels.length > 0 ? ' ' + labels.join(' ') : ''
+        return `ID: ${p.id} | €${(p.price / 100).toFixed(2)} | ${p.name}${p.unitQuantity ? ` [${p.unitQuantity}]` : ''}${labelStr}`
+      }).join('\n')
     } catch (err) {
       return `Fout bij zoeken: ${String(err)}`
     }
@@ -172,9 +180,11 @@ mcp.addTool({
       const authErr = authGuard(); if (authErr) return authErr
       const slots = await picnic.getDeliverySlots()
       if (slots.length === 0) return 'Geen bezorgtijden beschikbaar.'
-      return slots.map((s, i) =>
-        `${i}: ${s.slot_id} | ${s.window_start} – ${s.window_end}`
-      ).join('\n')
+      return slots.map((s, i) => {
+        const isGreen = (s.slot_characteristics ?? []).some(c => /green|eco|groen/i.test(c))
+        const greenLabel = isGreen ? ' 🌱' : ''
+        return `${i}: ${s.slot_id} | ${s.window_start} – ${s.window_end}${greenLabel}`
+      }).join('\n')
     } catch (err) {
       return `Fout bij ophalen bezorgtijden: ${String(err)}`
     }

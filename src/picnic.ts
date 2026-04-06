@@ -20,12 +20,14 @@ export interface Product {
   name: string
   price: number
   unitQuantity?: string
+  decorators?: any[]
 }
 
 export interface DeliverySlot {
   slot_id: string
   window_start: string
   window_end: string
+  slot_characteristics?: string[]
 }
 
 export interface UnavailableIngredient {
@@ -80,6 +82,7 @@ export class PicnicService {
       name: item.name,
       price: item.display_price ?? item.price ?? 0,
       unitQuantity: item.unit_quantity ?? item.unit_quantity_text ?? undefined,
+      decorators: item.decorators ?? [],
     }))
   }
 
@@ -97,7 +100,12 @@ export class PicnicService {
 
   async getDeliverySlots(): Promise<DeliverySlot[]> {
     const response = await this.client.cart.getDeliverySlots()
-    return response.delivery_slots ?? []
+    return (response.delivery_slots ?? []).map((slot: any) => ({
+      slot_id: slot.slot_id,
+      window_start: slot.window_start,
+      window_end: slot.window_end,
+      slot_characteristics: slot.slot_characteristics ?? [],
+    }))
   }
 
   async setDeliverySlot(slotId: string): Promise<void> {
