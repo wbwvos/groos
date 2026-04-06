@@ -114,6 +114,11 @@ export class PicnicService {
   }
 
   async confirmOrder(): Promise<void> {
+    // TODO: Picnic requires a payment step (iDEAL for first order, direct debit after) before
+    // confirmOrder can be called. The checkout flow creates a numeric order_id via a payment
+    // initiation endpoint that is not yet implemented here. Once direct debit is active after
+    // the first order, this flow can be revisited.
+    // See: https://github.com/wbwvos/groos/issues (checkout flow investigation)
     const cart = await this.client.cart.getCart()
     await this.client.cart.confirmOrder(cart.id)
   }
