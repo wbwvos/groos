@@ -2,8 +2,7 @@ import 'dotenv/config'
 import { FastMCP } from 'fastmcp'
 import { z } from 'zod'
 import { createPicnicService } from './picnic.js'
-import { loadStaples, loadMeals } from './config.js'
-import { suggestMeals } from './meals.js'
+import { loadStaples, loadMeals, loadHousehold } from './config.js'
 
 const mcp = new FastMCP({ name: 'groos', version: '0.1.0' })
 const picnic = createPicnicService()
@@ -27,7 +26,7 @@ mcp.addTool({
       const results = await picnic.search(query)
       if (results.length === 0) return 'Geen producten gevonden.'
       return results.slice(0, 8).map(p =>
-        `ID: ${p.id} | €${(p.price / 100).toFixed(2)} | ${p.name}`
+        `ID: ${p.id} | €${(p.price / 100).toFixed(2)} | ${p.name}${p.unitQuantity ? ` [${p.unitQuantity}]` : ''}`
       ).join('\n')
     } catch (err) {
       return `Fout bij zoeken: ${String(err)}`
@@ -53,15 +52,99 @@ mcp.addTool({
 })
 
 mcp.addTool({
+  name: 'remove_from_basket',
+  description: 'Verwijder een product uit het Picnic mandje',
+  parameters: z.object({
+    product_id: z.string().describe('Product ID'),
+    quantity: z.number().int().min(1).default(1).describe('Aantal te verwijderen'),
+  }),
+  execute: async ({ product_id, quantity }) => {
+    try {
+      await picnic.removeFromBasket(product_id, quantity)
+      return `${quantity}x product ${product_id} verwijderd uit mandje.`
+    } catch (err) {
+      return `Fout bij verwijderen uit mandje: ${String(err)}`
+    }
+  }
+})
+
+mcp.addTool({
   name: 'get_basket',
-  description: 'Bekijk de huidige inhoud van het Picnic mandje',
+  description: 'Bekijk de huidige inhoud van het Picnic mandje als leesbaar overzicht met totaalprijs',
   parameters: z.object({}),
   execute: async () => {
     try {
       const basket = await picnic.getBasket()
-      return JSON.stringify(basket, null, 2)
+      const items: Array<{ name: string; qty: number; price: number }> = []
+      for (const line of (basket as any).items ?? []) {
+        for (const article of line.items ?? []) {
+          const qty = article.decorators?.find((d: any) => d.type === 'QUANTITY')?.quantity ?? 1
+          items.push({ name: article.name, qty, price: article.price })
+        }
+      }
+      if (items.length === 0) return 'Mandje is leeg.'
+      const total = items.reduce((sum, i) => sum + i.price * i.qty, 0)
+      const lines = items.map(i => `${i.qty}x ${i.name.padEnd(40)} €${(i.price / 100).toFixed(2)}`)
+      lines.push('─'.repeat(55))
+      lines.push(`Totaal: €${(total / 100).toFixed(2)}`)
+      return lines.join('\n')
     } catch (err) {
       return `Fout bij ophalen mandje: ${String(err)}`
+    }
+  }
+})
+
+mcp.addTool({
+  name: 'clear_basket',
+  description: 'Maakt het volledige Picnic mandje leeg',
+  parameters: z.object({}),
+  execute: async () => {
+    try {
+      await picnic.clearBasket()
+      return 'Mandje is leeggemaakt.'
+    } catch (err) {
+      return `Fout bij leegmaken mandje: ${String(err)}`
+    }
+  }
+})
+
+mcp.addTool({
+  name: 'check_order_eligibility',
+  description: 'Controleer of de bestelling geplaatst kan worden: toont het minimumbedrag, het huidige mandjetotaal, en of het minimum gehaald is. Gebruik dit altijd vóór confirm_order.',
+  parameters: z.object({}),
+  execute: async () => {
+    try {
+      const [minimum, basket] = await Promise.all([picnic.getMinimumOrderValue(), picnic.getBasket()])
+      const items: Array<{ price: number; qty: number }> = []
+      for (const line of (basket as any).items ?? []) {
+        for (const article of line.items ?? []) {
+          const qty = article.decorators?.find((d: any) => d.type === 'QUANTITY')?.quantity ?? 1
+          items.push({ price: article.price, qty })
+        }
+      }
+      const total = items.reduce((sum, i) => sum + i.price * i.qty, 0)
+      const eligible = total >= minimum
+      return [
+        `Minimumbedrag: €${(minimum / 100).toFixed(2)}`,
+        `Mandje totaal: €${(total / 100).toFixed(2)}`,
+        eligible ? '✓ Minimum gehaald — bestelling kan geplaatst worden.' : `✗ Nog €${((minimum - total) / 100).toFixed(2)} nodig om het minimum te halen.`,
+      ].join('\n')
+    } catch (err) {
+      return `Fout bij controleren bestelling: ${String(err)}`
+    }
+  }
+})
+
+mcp.addTool({
+  name: 'confirm_order',
+  description: 'Plaatst de bestelling definitief bij Picnic. ⚠️ ALTIJD eerst check_order_eligibility aanroepen én bevestiging vragen aan de gebruiker voordat je dit tool gebruikt.',
+  parameters: z.object({}),
+  execute: async () => {
+    try {
+      await picnic.confirmOrder()
+      return '✓ Bestelling geplaatst! Je ontvangt een bevestiging van Picnic.'
+    } catch (err) {
+      return `Fout bij plaatsen bestelling: ${String(err)}`
     }
   }
 })
@@ -100,38 +183,98 @@ mcp.addTool({
 })
 
 mcp.addTool({
-  name: 'fill_weekly_basket',
-  description: 'Vul het mandje met vaste boodschappen en stel maaltijdsuggesties voor de week voor. Ingrediënten voor maaltijden voeg je daarna handmatig toe.',
-  parameters: z.object({
-    meal_count: z.number().int().min(1).max(5).default(3).describe('Aantal avondmaaltijden om voor te stellen'),
-  }),
-  execute: async ({ meal_count }) => {
+  name: 'get_weekly_plan',
+  description: `Haal de weekplanning op: vaste boodschappen met productnamen en verpakkingseenheden, bekende maaltijden als inspiratie, en het huishouden. Gebruik deze info om hoeveelheden te controleren op redelijkheid voor het huishouden (bijv. 6x "1 kilo" bananen is te veel voor 2 personen) en om maaltijdsuggesties te doen voordat je iets toevoegt aan het mandje.`,
+  parameters: z.object({}),
+  execute: async () => {
     try {
-      const [staples, knownMeals] = await Promise.all([loadStaples(), loadMeals()])
-      const suggestedMeals = await suggestMeals(knownMeals, meal_count)
+      const [staples, knownMeals, household] = await Promise.all([loadStaples(), loadMeals(), loadHousehold()])
 
-      const log: string[] = []
-      log.push(`Voorgestelde maaltijden deze week:\n${suggestedMeals.map(m => `- ${m}`).join('\n')}\n`)
+      const lines: string[] = []
 
-      log.push('Vaste boodschappen toevoegen...')
+      lines.push(`Huishouden: ${household.adults} volwassene(n), ${household.children} kind(eren)\n`)
+
+      lines.push('Vaste boodschappen (uit config):')
       for (const staple of staples) {
-        try {
-          const results = await picnic.search(staple.name)
-          if (results.length > 0) {
-            await picnic.addToBasket(results[0].id, staple.quantity)
-            log.push(`✓ ${staple.quantity}x ${results[0].name}`)
-          } else {
-            log.push(`✗ Niet gevonden: ${staple.name}`)
-          }
-        } catch (err) {
-          log.push(`✗ Fout bij ${staple.name}: ${String(err)}`)
+        const results = await picnic.search(staple.name)
+        if (results.length > 0) {
+          const p = results[0]
+          lines.push(`  ${staple.name} → ${p.id} | ${p.name}${p.unitQuantity ? ` [${p.unitQuantity}]` : ''} | €${(p.price / 100).toFixed(2)} | geconfigureerd aantal: ${staple.quantity}`)
+        } else {
+          lines.push(`  ${staple.name} → niet gevonden`)
         }
       }
 
-      log.push('\nMandje gevuld! Open Picnic om te controleren en te bestellen.')
+      lines.push('\nBekende maaltijden (voor suggesties):')
+      knownMeals.forEach(m => lines.push(`  - ${m}`))
+
+      lines.push('\nGebruik add_to_basket om de goedgekeurde hoeveelheden toe te voegen.')
+      return lines.join('\n')
+    } catch (err) {
+      return `Fout bij ophalen weekplanning: ${String(err)}`
+    }
+  }
+})
+
+mcp.addTool({
+  name: 'get_weekly_recipes',
+  description: 'Haal de wekelijks uitgelichte recepten van Picnic op',
+  parameters: z.object({}),
+  execute: async () => {
+    try {
+      const recipes = await picnic.getWeeklyRecipes()
+      if (recipes.length === 0) return 'Geen recepten gevonden deze week.'
+      return recipes.map(r =>
+        `ID: ${r.id} | ${r.name}${r.cookingTime ? ` (${r.cookingTime})` : ''} | ${r.productIds.length} ingrediënten`
+      ).join('\n')
+    } catch (err) {
+      return `Fout bij ophalen recepten: ${String(err)}`
+    }
+  }
+})
+
+mcp.addTool({
+  name: 'add_recipe_to_basket',
+  description: 'Voeg alle ingrediënten van een Picnic recept toe aan het mandje',
+  parameters: z.object({
+    recipe_id: z.string().describe('Recept ID uit get_weekly_recipes'),
+  }),
+  execute: async ({ recipe_id }) => {
+    try {
+      const recipes = await picnic.getWeeklyRecipes()
+      const recipe = recipes.find(r => r.id === recipe_id)
+      if (!recipe) return `Recept ${recipe_id} niet gevonden. Gebruik get_weekly_recipes voor de huidige lijst.`
+
+      const log: string[] = [`Ingrediënten toevoegen voor: ${recipe.name}`]
+      let added = 0
+      for (const productId of recipe.productIds) {
+        try {
+          await picnic.addToBasket(productId, 1)
+          log.push(`✓ ${productId}`)
+          added++
+        } catch (err) {
+          log.push(`✗ ${productId}: ${String(err)}`)
+        }
+      }
+      log.push(`\n${added}/${recipe.productIds.length} ingrediënten toegevoegd.`)
+
+      if (recipe.unavailable.length > 0) {
+        log.push('\nNiet beschikbaar — mogelijke alternatieven:')
+        for (const u of recipe.unavailable) {
+          log.push(`\n✗ ${u.name}`)
+          if (u.alternatives.length > 0) {
+            u.alternatives.forEach(a =>
+              log.push(`  → ${a.id} | €${(a.price / 100).toFixed(2)} | ${a.name}${a.unitQuantity ? ` [${a.unitQuantity}]` : ''}`)
+            )
+          } else {
+            log.push('  (geen alternatieven gevonden)')
+          }
+        }
+      }
+
       return log.join('\n')
     } catch (err) {
-      return `Fout bij vullen mandje: ${String(err)}`
+      return `Fout bij toevoegen recept: ${String(err)}`
     }
   }
 })

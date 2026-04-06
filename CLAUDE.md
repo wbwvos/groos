@@ -1,57 +1,73 @@
 # Groos
 
-Automatische weekboodschappen via Picnic, aangestuurd vanuit Claude Code via een MCP server.
+MCP server voor Picnic.nl — laat Claude Code je weekboodschappen doen.
 
-## Project
+## Setup
 
-- **Winkel:** Picnic (`picnic-api` npm package)
-- **Interface:** MCP server (FastMCP) voor gebruik in Claude Code
-- **AI:** Claude API voor maaltijdsuggesties
-- **Taal:** TypeScript
-
-## Fases
-
-1. **CLI** — testbed voor Picnic integratie (search, add, basket, delivery)
-2. **MCP** — FastMCP server met tools voor Claude Code
-3. **UI** (toekomst) — Vite + React + shadcn voor vriendin
-
-## Structuur
-
-```
-groos/
-├── src/
-│   ├── picnic.ts        # Picnic API wrapper
-│   ├── cli.ts           # CLI testbed
-│   └── mcp.ts           # FastMCP server (fase 2)
-├── config/
-│   ├── staples.yaml     # vaste boodschappen
-│   └── meals.yaml       # maaltijdenlijst
-├── docs/plans/          # design docs en implementatieplannen
-└── .env                 # credentials (nooit committen)
+```bash
+cp .env.example .env
+# Vul PICNIC_USERNAME en PICNIC_PASSWORD in
+npm install
 ```
 
 ## MCP registreren in Claude Code
 
-`tsx` zit alleen als lokale dev dependency — gebruik het volledige pad:
-
 ```bash
-claude mcp add groos -- /home/sledder/projects/groos/node_modules/.bin/tsx /home/sledder/projects/groos/src/mcp.ts
+claude mcp add groos -- $(pwd)/node_modules/.bin/tsx $(pwd)/src/mcp.ts
 ```
 
-Vereiste `.env` variabelen (kopieer van `.env.example`):
-- `PICNIC_USERNAME`
-- `PICNIC_PASSWORD`
-- `ANTHROPIC_API_KEY`
+## Eerste keer: 2FA instellen
 
-## CLI testen
+Picnic gebruikt SMS-verificatie. Dit hoef je maar één keer te doen:
 
 ```bash
 source ~/.nvm/nvm.sh && nvm use 22
-npm run cli search havermelk
-npm run cli basket
-npm run cli delivery
+npm run cli 2fa-request       # stuurt SMS
+npm run cli 2fa-verify <code> # voer de code in
 ```
 
-## Design doc
+De sessie wordt opgeslagen in `.picnic-session` en hergebruikt bij herstart.
 
-Zie `docs/plans/2026-04-05-groos-design.md` voor het volledige design.
+## Beschikbare MCP tools
+
+| Tool | Beschrijving |
+|------|-------------|
+| `search_product` | Zoek producten op naam |
+| `add_to_basket` | Voeg product toe aan mandje |
+| `remove_from_basket` | Verwijder product uit mandje |
+| `clear_basket` | Maak mandje leeg |
+| `get_basket` | Toon mandje met totaalprijs |
+| `get_weekly_plan` | Toon vaste boodschappen + bekende maaltijden (voor quantity check) |
+| `get_weekly_recipes` | Toon uitgelichte recepten van Picnic deze week |
+| `add_recipe_to_basket` | Voeg ingrediënten van een recept toe |
+| `get_delivery_slots` | Beschikbare bezorgtijden |
+| `set_delivery_slot` | Kies bezorgmoment |
+| `check_order_eligibility` | Controleer minimum bedrag |
+| `confirm_order` | ⚠️ Plaats bestelling definitief |
+
+## Configuratie
+
+- `config/staples.yaml` — vaste wekelijkse boodschappen
+- `config/meals.yaml` — bekende maaltijden (voor suggesties)
+- `config/household.yaml` — gezinssamenstelling (voor hoeveelheidscheck)
+
+## Runtime vereisten
+
+- Node.js 22+ (via nvm aanbevolen op WSL)
+- Picnic.nl account (Nederland)
+
+## Bekende beperkingen
+
+- Receptparsing is gebaseerd op Picnic's interne app-structuur. Een Picnic-update kan dit breken.
+- Alleen de ~10 uitgelichte recepten van de Picnic homepage zijn beschikbaar; er is geen zoekfunctie voor recepten.
+- `.picnic-session` bevat je auth token — nooit committen (staat in `.gitignore`).
+
+## API overzicht (picnic-api v4)
+
+**Auth:** `login`, `generate2FACode('SMS')`, `verify2FACode(code)`
+
+**Cart:** `getCart`, `addProductToCart`, `removeProductFromCart`, `clearCart`, `getDeliverySlots`, `setDeliverySlot`, `getMinimumOrderValue`, `confirmOrder(orderId)` ⚠️
+
+**Catalog:** `search(query)`
+
+**App:** `getPage('home_page_root')`, `getPage('selling-group-details-page?selling_group_id=X')`

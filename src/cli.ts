@@ -43,7 +43,16 @@ async function main() {
       if (!query) { console.error('Gebruik: npm run cli search <zoekterm>'); process.exit(1) }
       const results = await picnic.search(query)
       if (results.length === 0) { console.log('Geen resultaten gevonden.'); break }
-      results.slice(0, 10).forEach(p => console.log(`${p.id}  €${(p.price/100).toFixed(2)}  ${p.name}`))
+      results.slice(0, 10).forEach(p => console.log(`${p.id}  €${(p.price/100).toFixed(2)}  ${p.name}${p.unitQuantity ? `  [${p.unitQuantity}]` : ''}`))
+      break
+    }
+
+    case 'remove': {
+      const [productId, qtyStr] = args
+      if (!productId) { console.error('Gebruik: npm run cli remove <product-id> [aantal]'); process.exit(1) }
+      const qty = qtyStr ? parseInt(qtyStr, 10) : 1
+      await picnic.removeFromBasket(productId, qty)
+      console.log(`Verwijderd: ${productId}`)
       break
     }
 

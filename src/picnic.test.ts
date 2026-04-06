@@ -1,10 +1,17 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
+// Mock fs so no real .picnic-session file interferes
+vi.mock('fs', () => ({
+  existsSync: vi.fn().mockReturnValue(false),
+  readFileSync: vi.fn(),
+  writeFileSync: vi.fn(),
+}))
+
 // Mock picnic-api before importing our wrapper
 vi.mock('picnic-api', () => {
   const MockPicnicClient = vi.fn(function (this: any) {
     this.auth = {
-      login: vi.fn().mockResolvedValue(undefined),
+      login: vi.fn().mockResolvedValue({ authKey: 'test-auth-key' }),
     }
     this.catalog = {
       search: vi.fn().mockResolvedValue([
