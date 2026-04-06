@@ -206,27 +206,74 @@ mcp.addTool({
   execute: async () => {
     try {
       const authErr = authGuard(); if (authErr) return authErr
-      const [staples, knownMeals, household] = await Promise.all([loadStaples(), loadMeals(), loadHousehold()])
+
+      // Run all operations in parallel
+      const [staples, knownMeals, household, basket] = await Promise.all([
+        loadStaples(),
+        loadMeals(),
+        loadHousehold(),
+        picnic.getBasket()
+      ])
 
       const lines: string[] = []
 
-      lines.push(`Huishouden: ${household.adults} volwassene(n), ${household.children} kind(eren) | Budgetvoorkeur: ${household.budget_preference}\n`)
+      // Date header
+      const dateStr = new Date().toLocaleDateString('nl-NL', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+      lines.push(`## Weekoverzicht – ${dateStr}\n`)
 
-      lines.push('Vaste boodschappen (uit config):')
+      // Basket section
+      const basketItems: Array<{ price: number; qty: number }> = []
+      for (const line of (basket as any).items ?? []) {
+        for (const article of line.items ?? []) {
+          const qty = article.decorators?.find((d: any) => d.type === 'QUANTITY')?.quantity ?? 1
+          basketItems.push({ price: article.price, qty })
+        }
+      }
+      const basketTotal = basketItems.reduce((sum, i) => sum + i.price * i.qty, 0)
+      const basketItemCount = basketItems.reduce((sum, i) => sum + i.qty, 0)
+
+      lines.push('### Mandje')
+      if (basketItemCount === 0) {
+        lines.push('[leeg]\n')
+      } else {
+        lines.push(`⚠️ Mandje bevat al ${basketItemCount} producten (€${(basketTotal / 100).toFixed(2)}) — gebruik clear_basket om opnieuw te beginnen.\n`)
+      }
+
+      // Gezin section
+      lines.push('### Gezin')
+      lines.push(`- ${household.adults} volwassene(n), ${household.children} kind(eren)`)
+      lines.push(`- Budgetvoorkeur: ${household.budget_preference}\n`)
+
+      // Vaste boodschappen section
+      lines.push('### Vaste boodschappen')
       for (const staple of staples) {
         const results = await picnic.search(staple.name)
         if (results.length > 0) {
           const p = results[0]
-          lines.push(`  ${staple.name} → ${p.id} | ${p.name}${p.unitQuantity ? ` [${p.unitQuantity}]` : ''} | €${(p.price / 100).toFixed(2)} | geconfigureerd aantal: ${staple.quantity}`)
+          lines.push(`- ${staple.name} → ${p.id} | ${p.name}${p.unitQuantity ? ` [${p.unitQuantity}]` : ''} | €${(p.price / 100).toFixed(2)} | geconfigureerd: ${staple.quantity}x`)
         } else {
-          lines.push(`  ${staple.name} → niet gevonden`)
+          lines.push(`- ${staple.name} → niet gevonden`)
         }
       }
+      lines.push('')
 
-      lines.push('\nBekende maaltijden (voor suggesties):')
-      knownMeals.forEach(m => lines.push(`  - ${m}`))
+      // Maaltijden section
+      lines.push('### Maaltijden (suggesties)')
+      knownMeals.forEach(m => lines.push(`- ${m}`))
+      lines.push('')
 
-      lines.push('\nGebruik add_to_basket om de goedgekeurde hoeveelheden toe te voegen.')
+      // Basisvoorraad section
+      lines.push('### Basisvoorraad (check eerst!)')
+      lines.push('Zout, peper, olie, bloem, boter, suiker, azijn, knoflook — controleer of dit thuis aanwezig is voor geplande maaltijden.\n')
+
+      // Volgende stappen section
+      lines.push('### Volgende stappen')
+      lines.push('1. Voeg staples toe via `add_to_basket` (gebruik bovenstaande IDs)')
+      lines.push('2. Kies maaltijden en voeg ingrediënten toe via `add_recipe_to_basket` of `search_product`')
+      lines.push('3. Controleer mandje met `get_basket`')
+      lines.push('4. Controleer minimum bedrag en bezorgadres met `check_order_eligibility`')
+      lines.push('5. Bevestig bestelling met `confirm_order`')
+
       return lines.join('\n')
     } catch (err) {
       return `Fout bij ophalen weekplanning: ${String(err)}`
