@@ -109,9 +109,20 @@ mcp.addTool({
       const items = parseBasketItems(basket)
       if (items.length === 0) return 'Mandje is leeg.'
       const total = items.reduce((sum, i) => sum + i.price * i.qty, 0)
-      const lines = items.map(i => `ID: ${i.id} | ${i.qty}x ${i.name.padEnd(40)} €${(i.price / 100).toFixed(2)}`)
+      const unavailableThreshold = 10000
+      const hasUnavailable = items.some(i => i.price >= unavailableThreshold)
+      const lines = items.map(i => {
+        const line = `ID: ${i.id} | ${i.qty}x ${i.name.padEnd(40)} €${(i.price / 100).toFixed(2)}`
+        if (i.price >= unavailableThreshold) {
+          return `⚠️ ${line} — NIET BESCHIKBAAR`
+        }
+        return line
+      })
       lines.push('─'.repeat(70))
       lines.push(`Totaal: €${(total / 100).toFixed(2)}`)
+      if (hasUnavailable) {
+        lines.push('\n⚠️ Niet-beschikbare items gevonden — gebruik search_product om alternatieven te vinden en verwijder met remove_from_basket.')
+      }
       return lines.join('\n')
     } catch (err) {
       return `Fout bij ophalen mandje: ${String(err)}`
@@ -145,11 +156,24 @@ mcp.addTool({
       const items = parseBasketItems(basket)
       const total = items.reduce((sum, i) => sum + i.price * i.qty, 0)
       const eligible = total >= minimum
-      return [
+      const unavailableThreshold = 10000
+      const unavailableItems = items.filter(i => i.price >= unavailableThreshold)
+
+      const result = [
         `Minimumbedrag: €${(minimum / 100).toFixed(2)}`,
         `Mandje totaal: €${(total / 100).toFixed(2)}`,
         eligible ? '✓ Minimum gehaald — bestelling kan geplaatst worden.' : `✗ Nog €${((minimum - total) / 100).toFixed(2)} nodig om het minimum te halen.`,
-      ].join('\n')
+      ]
+
+      if (unavailableItems.length > 0) {
+        result.push('')
+        result.push('⚠️ Niet-beschikbare items in mandje:')
+        for (const item of unavailableItems) {
+          result.push(`- ${item.name} (${item.id}) — verwijder via remove_from_basket en zoek alternatief via search_product`)
+        }
+      }
+
+      return result.join('\n')
     } catch (err) {
       return `Fout bij controleren bestelling: ${String(err)}`
     }
