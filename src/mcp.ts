@@ -2,7 +2,7 @@ import 'dotenv/config'
 import { FastMCP } from 'fastmcp'
 import { z } from 'zod'
 import { createPicnicService } from './picnic.js'
-import { loadStaples, loadMeals, loadHousehold } from './config.js'
+import { loadStaples, loadMeals, loadHousehold, saveStaples } from './config.js'
 
 const mcp = new FastMCP({ name: 'groos', version: '0.1.0' })
 const picnic = createPicnicService()
@@ -230,6 +230,55 @@ mcp.addTool({
       return lines.join('\n')
     } catch (err) {
       return `Fout bij ophalen weekplanning: ${String(err)}`
+    }
+  }
+})
+
+mcp.addTool({
+  name: 'manage_staples',
+  description: 'Voeg, verwijder of wijzig vaste wekelijkse boodschappen. Dit persists in config/staples.yaml.',
+  parameters: z.object({
+    action: z.enum(['add', 'remove', 'set_quantity']).describe('Actie: add (toevoegen), remove (verwijderen), set_quantity (aantal wijzigen)'),
+    name: z.string().describe('Naam van het product, bijv. "havermelk"'),
+    quantity: z.number().int().min(1).optional().describe('Aantal (verplicht bij add en set_quantity)'),
+  }),
+  execute: async ({ action, name, quantity }) => {
+    try {
+      const staples = await loadStaples()
+      const lowerName = name.toLowerCase()
+
+      if (action === 'add') {
+        if (!quantity) return `Aantal is verplicht bij toevoegen. Voorbeeld: name="havermelk", quantity=2`
+        const exists = staples.some(s => s.name.toLowerCase() === lowerName)
+        if (exists) return `'${name}' staat al in de staples. Gebruik set_quantity om het aantal te wijzigen.`
+        staples.push({ name, quantity })
+        await saveStaples(staples)
+      } else if (action === 'remove') {
+        const idx = staples.findIndex(s => s.name.toLowerCase() === lowerName)
+        if (idx === -1) return `'${name}' niet gevonden in staples.`
+        staples.splice(idx, 1)
+        await saveStaples(staples)
+      } else if (action === 'set_quantity') {
+        if (!quantity) return `Aantal is verplicht bij wijzigen. Voorbeeld: name="havermelk", quantity=3`
+        const idx = staples.findIndex(s => s.name.toLowerCase() === lowerName)
+        if (idx === -1) {
+          // Treat as add
+          staples.push({ name, quantity })
+        } else {
+          staples[idx].quantity = quantity
+        }
+        await saveStaples(staples)
+      }
+
+      // Format confirmation message with current staples
+      const updated = await loadStaples()
+      const lines = [`Staples bijgewerkt:`]
+      for (const s of updated) {
+        lines.push(`- ${s.quantity}x ${s.name}`)
+      }
+      return lines.join('\n')
+    } catch (err) {
+      return `Fout bij beheren staples: ${String(err)}`
     }
   }
 })

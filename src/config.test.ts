@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { loadStaples, loadMeals, parseStapleString } from './config.js'
+import { loadStaples, loadMeals, parseStapleString, saveStaples } from './config.js'
 
 describe('loadStaples', () => {
   it('returns an array of staple items', async () => {
@@ -50,5 +50,21 @@ describe('parseStapleString', () => {
     expect(() => parseStapleString('2xhavermelk')).toThrow(
       'Ongeldig staples formaat: "2xhavermelk". Gebruik "2x havermelk" of "havermelk".'
     )
+  })
+})
+
+describe('saveStaples roundtrip', () => {
+  it('saves staples and loads them back unchanged', async () => {
+    const original = await loadStaples()
+    const testStaples = [
+      { name: 'havermelk', quantity: 3 },
+      { name: 'bananen', quantity: 2 },
+      { name: 'eieren', quantity: 1 },
+    ]
+    await saveStaples(testStaples)
+    const loaded = await loadStaples()
+    expect(loaded).toEqual(testStaples)
+    // Restore original
+    await saveStaples(original)
   })
 })

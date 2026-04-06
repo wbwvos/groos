@@ -1,4 +1,4 @@
-import { readFile } from 'fs/promises'
+import { readFile, writeFile } from 'fs/promises'
 import { resolve, dirname } from 'path'
 import { fileURLToPath } from 'url'
 import yaml from 'js-yaml'
@@ -44,4 +44,10 @@ export async function loadMeals(): Promise<string[]> {
   const raw = await readFile(resolve(configDir, 'meals.yaml'), 'utf8')
   const parsed = MealsConfigSchema.parse(yaml.load(raw))
   return parsed.meals.map(m => m.naam)
+}
+
+export async function saveStaples(staples: Staple[]): Promise<void> {
+  const lines = staples.map(s => `  - ${s.quantity}x ${s.name}`)
+  const content = `staples:\n${lines.join('\n')}\n`
+  await writeFile(resolve(configDir, 'staples.yaml'), content, 'utf8')
 }
