@@ -7,13 +7,20 @@ import { loadStaples, loadMeals, loadHousehold } from './config.js'
 const mcp = new FastMCP({ name: 'groos', version: '0.1.0' })
 const picnic = createPicnicService()
 
-// Login bij opstarten
+// Login bij opstarten — server blijft draaien zodat Claude Code een leesbare foutmelding ziet
+let setupError: string | null = null
 try {
   await picnic.login()
 } catch (err) {
-  console.error(`Picnic login mislukt: ${String(err)}`)
-  process.exit(1)
+  const msg = String(err)
+  if (msg.toLowerCase().includes('second factor') || msg.toLowerCase().includes('2fa') || msg.toLowerCase().includes('verification')) {
+    setupError = `⚠️ Picnic 2FA vereist. Voer éénmalig uit in de terminal:\n\n  npm run cli 2fa-request\n  npm run cli 2fa-verify <SMS-code>\n\nHerstart daarna de MCP server in Claude Code.`
+  } else {
+    setupError = `⚠️ Picnic login mislukt: ${msg}\n\nControleer PICNIC_USERNAME en PICNIC_PASSWORD in je .env bestand.`
+  }
 }
+
+function authGuard(): string | null { return setupError }
 
 mcp.addTool({
   name: 'search_product',
@@ -23,6 +30,7 @@ mcp.addTool({
   }),
   execute: async ({ query }) => {
     try {
+      const authErr = authGuard(); if (authErr) return authErr
       const results = await picnic.search(query)
       if (results.length === 0) return 'Geen producten gevonden.'
       return results.slice(0, 8).map(p =>
@@ -43,6 +51,7 @@ mcp.addTool({
   }),
   execute: async ({ product_id, quantity }) => {
     try {
+      const authErr = authGuard(); if (authErr) return authErr
       await picnic.addToBasket(product_id, quantity)
       return `${quantity}x product ${product_id} toegevoegd aan mandje.`
     } catch (err) {
@@ -60,6 +69,7 @@ mcp.addTool({
   }),
   execute: async ({ product_id, quantity }) => {
     try {
+      const authErr = authGuard(); if (authErr) return authErr
       await picnic.removeFromBasket(product_id, quantity)
       return `${quantity}x product ${product_id} verwijderd uit mandje.`
     } catch (err) {
@@ -74,6 +84,7 @@ mcp.addTool({
   parameters: z.object({}),
   execute: async () => {
     try {
+      const authErr = authGuard(); if (authErr) return authErr
       const basket = await picnic.getBasket()
       const items: Array<{ name: string; qty: number; price: number }> = []
       for (const line of (basket as any).items ?? []) {
@@ -100,6 +111,7 @@ mcp.addTool({
   parameters: z.object({}),
   execute: async () => {
     try {
+      const authErr = authGuard(); if (authErr) return authErr
       await picnic.clearBasket()
       return 'Mandje is leeggemaakt.'
     } catch (err) {
@@ -114,6 +126,7 @@ mcp.addTool({
   parameters: z.object({}),
   execute: async () => {
     try {
+      const authErr = authGuard(); if (authErr) return authErr
       const [minimum, basket] = await Promise.all([picnic.getMinimumOrderValue(), picnic.getBasket()])
       const items: Array<{ price: number; qty: number }> = []
       for (const line of (basket as any).items ?? []) {
@@ -141,6 +154,7 @@ mcp.addTool({
   parameters: z.object({}),
   execute: async () => {
     try {
+      const authErr = authGuard(); if (authErr) return authErr
       await picnic.confirmOrder()
       return '✓ Bestelling geplaatst! Je ontvangt een bevestiging van Picnic.'
     } catch (err) {
@@ -155,6 +169,7 @@ mcp.addTool({
   parameters: z.object({}),
   execute: async () => {
     try {
+      const authErr = authGuard(); if (authErr) return authErr
       const slots = await picnic.getDeliverySlots()
       if (slots.length === 0) return 'Geen bezorgtijden beschikbaar.'
       return slots.map((s, i) =>
@@ -174,6 +189,7 @@ mcp.addTool({
   }),
   execute: async ({ slot_id }) => {
     try {
+      const authErr = authGuard(); if (authErr) return authErr
       await picnic.setDeliverySlot(slot_id)
       return `Bezorgtijd ingesteld: ${slot_id}`
     } catch (err) {
@@ -188,6 +204,7 @@ mcp.addTool({
   parameters: z.object({}),
   execute: async () => {
     try {
+      const authErr = authGuard(); if (authErr) return authErr
       const [staples, knownMeals, household] = await Promise.all([loadStaples(), loadMeals(), loadHousehold()])
 
       const lines: string[] = []
@@ -222,6 +239,7 @@ mcp.addTool({
   parameters: z.object({}),
   execute: async () => {
     try {
+      const authErr = authGuard(); if (authErr) return authErr
       const recipes = await picnic.getWeeklyRecipes()
       if (recipes.length === 0) return 'Geen recepten gevonden deze week.'
       return recipes.map(r =>
@@ -241,6 +259,7 @@ mcp.addTool({
   }),
   execute: async ({ recipe_id }) => {
     try {
+      const authErr = authGuard(); if (authErr) return authErr
       const recipes = await picnic.getWeeklyRecipes()
       const recipe = recipes.find(r => r.id === recipe_id)
       if (!recipe) return `Recept ${recipe_id} niet gevonden. Gebruik get_weekly_recipes voor de huidige lijst.`
