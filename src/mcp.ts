@@ -27,13 +27,14 @@ mcp.addTool({
   description: 'Zoek producten in Picnic op naam',
   parameters: z.object({
     query: z.string().describe('Zoekterm, bijv. "havermelk"'),
+    limit: z.number().int().min(1).max(20).default(8).describe('Max aantal resultaten'),
   }),
-  execute: async ({ query }) => {
+  execute: async ({ query, limit }) => {
     try {
       const authErr = authGuard(); if (authErr) return authErr
       const results = await picnic.search(query)
       if (results.length === 0) return 'Geen producten gevonden.'
-      return results.slice(0, 8).map(p =>
+      return results.slice(0, limit).map(p =>
         `ID: ${p.id} | €${(p.price / 100).toFixed(2)} | ${p.name}${p.unitQuantity ? ` [${p.unitQuantity}]` : ''}`
       ).join('\n')
     } catch (err) {

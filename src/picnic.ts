@@ -49,15 +49,25 @@ export class PicnicService {
   private recipesCache: { recipes: Recipe[]; fetchedAt: number } | null = null
   private readonly CACHE_TTL_MS = 10 * 60 * 1000 // 10 minutes
 
-  constructor(username: string, password: string) {
+  constructor(username: string, password: string, countryCode: 'NL' | 'DE' = 'NL') {
     const savedKey = loadAuthKey()
-    this.client = new PicnicClient(savedKey ? { authKey: savedKey } : undefined)
+    this.client = new PicnicClient(savedKey ? { authKey: savedKey, countryCode } : { countryCode })
     this.username = username
     this.password = password
   }
 
   async login(): Promise<void> {
-    if (loadAuthKey()) return // sessie nog geldig
+    if (loadAuthKey()) {
+      // Validate the saved session with a cheap API call
+      try {
+        await this.client.user.getUserDetails()
+        return // Session still valid
+      } catch {
+        // Session expired — delete and re-login
+        saveAuthKey('')
+        this.client = new PicnicClient()
+      }
+    }
     const result = await this.client.auth.login(this.username, this.password)
     saveAuthKey(result.authKey)
   }
@@ -185,20 +195,37 @@ export class PicnicService {
   }
 
   async request2FA(): Promise<void> {
-    await this.client.auth.generate2FACode('SMS')
+    try {
+      await this.client.auth.generate2FACode('SMS')
+    } catch (err) {
+      // Picnic returns an empty body for 2FA endpoints, causing a JSON parse
+      // error even when the request succeeds. Ignore parse errors only.
+      if (!String(err).toLowerCase().includes('json') && !String(err).toLowerCase().includes('parse')) {
+        throw err
+      }
+    }
   }
 
   async verify2FA(code: string): Promise<void> {
-    const result = await this.client.auth.verify2FACode(code)
-    saveAuthKey(result.authKey)
+    try {
+      const result = await this.client.auth.verify2FACode(code)
+      saveAuthKey(result.authKey)
+    } catch (err) {
+      // Same empty-body quirk as request2FA — if the key was updated
+      // the session file will be refreshed on next login() call instead.
+      if (!String(err).toLowerCase().includes('json') && !String(err).toLowerCase().includes('parse')) {
+        throw err
+      }
+    }
   }
 }
 
 export function createPicnicService(): PicnicService {
   const username = process.env.PICNIC_USERNAME
   const password = process.env.PICNIC_PASSWORD
+  const countryCode = (process.env.PICNIC_COUNTRY_CODE ?? 'NL') as 'NL' | 'DE'
   if (!username || !password) {
     throw new Error('PICNIC_USERNAME en PICNIC_PASSWORD zijn vereist in .env')
   }
-  return new PicnicService(username, password)
+  return new PicnicService(username, password, countryCode)
 }
