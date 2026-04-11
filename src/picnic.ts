@@ -1,9 +1,11 @@
 import PicnicClient from 'picnic-api'
-import 'dotenv/config'
+import dotenv from 'dotenv'
 import { readFileSync, writeFileSync, existsSync } from 'fs'
 import { resolve } from 'path'
 
-const SESSION_FILE = resolve(process.cwd(), '.picnic-session')
+dotenv.config({ path: resolve(import.meta.dirname, '../.env') })
+
+const SESSION_FILE = resolve(import.meta.dirname, '../.picnic-session')
 
 function loadAuthKey(): string | undefined {
   if (existsSync(SESSION_FILE)) {

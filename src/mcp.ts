@@ -1,4 +1,3 @@
-import 'dotenv/config'
 import { FastMCP } from 'fastmcp'
 import { z } from 'zod'
 import { createPicnicService } from './picnic.js'
