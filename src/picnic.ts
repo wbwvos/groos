@@ -98,7 +98,13 @@ export class PicnicService {
   }
 
   async addRecipeProductToBasket(productId: string, recipeId: string, quantity: number = 1): Promise<void> {
-    await this.client.recipe.addProductToRecipe(productId, recipeId, undefined, quantity)
+    try {
+      await this.client.recipe.addProductToRecipe(productId, recipeId, undefined, quantity)
+    } catch {
+      // Picnic valideert het recipe_id server-side — als het geen geldig recipe ID is
+      // (bijv. een selling group ID uit de home page), valt terug op gewoon toevoegen.
+      await this.client.cart.addProductToCart(productId, quantity)
+    }
   }
 
   async removeFromBasket(productId: string, quantity: number = 1): Promise<void> {
