@@ -30,6 +30,7 @@ export interface DeliverySlot {
   window_start: string
   window_end: string
   slot_characteristics?: string[]
+  is_green?: boolean
 }
 
 export interface UnavailableIngredient {
@@ -101,13 +102,28 @@ export class PicnicService {
   }
 
   async getDeliverySlots(): Promise<DeliverySlot[]> {
-    const response = await this.client.cart.getDeliverySlots()
+    const [response, greenIds] = await Promise.all([
+      this.client.cart.getDeliverySlots(),
+      this.getGreenSlotIds(),
+    ])
     return (response.delivery_slots ?? []).map((slot: any) => ({
       slot_id: slot.slot_id,
       window_start: slot.window_start,
       window_end: slot.window_end,
       slot_characteristics: slot.slot_characteristics ?? [],
+      is_green: greenIds.has(slot.slot_id),
     }))
+  }
+
+  private async getGreenSlotIds(): Promise<Set<string>> {
+    try {
+      const page: any = await this.client.app.getPage('slot-selector-root')
+      const pageJson = JSON.stringify(page)
+      const matches = pageJson.matchAll(/"is_green_slot":true[^}]{0,200}"slot_id":"([^"]+)"/g)
+      return new Set([...matches].map(m => m[1]))
+    } catch {
+      return new Set()
+    }
   }
 
   async setDeliverySlot(slotId: string): Promise<void> {

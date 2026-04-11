@@ -10,6 +10,7 @@
   "scripts": {
     "cli": "tsx src/cli.ts",
     "mcp": "tsx src/mcp.ts",
+    "explore": "tsx src/explore-api.ts",
     "test": "vitest run",
     "test:watch": "vitest"
   },

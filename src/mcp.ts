@@ -107,7 +107,6 @@ mcp.addTool({
       const basket = await picnic.getBasket()
       const items = parseBasketItems(basket)
       if (items.length === 0) return 'Mandje is leeg.'
-      const total = items.reduce((sum, i) => sum + i.price * i.qty, 0)
       const unavailableThreshold = 10000
       const hasUnavailable = items.some(i => i.price >= unavailableThreshold)
       const lines = items.map(i => {
@@ -118,7 +117,15 @@ mcp.addTool({
         return line
       })
       lines.push('─'.repeat(70))
-      lines.push(`Totaal: €${(total / 100).toFixed(2)}`)
+      const checkoutTotal = basket.checkout_total_price
+      const listTotal = basket.total_price
+      lines.push(`Totaal: €${(checkoutTotal / 100).toFixed(2)}`)
+      if (listTotal > checkoutTotal) {
+        lines.push(`💰 Kortingen: -€${((listTotal - checkoutTotal) / 100).toFixed(2)} (lijstprijs €${(listTotal / 100).toFixed(2)})`)
+      }
+      if (basket.membership_savings > 0) {
+        lines.push(`🎟️ Lidmaatschapsvoordeel: -€${(basket.membership_savings / 100).toFixed(2)}`)
+      }
       if (hasUnavailable) {
         lines.push('\n⚠️ Niet-beschikbare items gevonden — gebruik search_product om alternatieven te vinden en verwijder met remove_from_basket.')
       }
@@ -157,7 +164,7 @@ mcp.addTool({
         picnic.getDeliveryAddress(),
       ])
       const items = parseBasketItems(basket)
-      const total = items.reduce((sum, i) => sum + i.price * i.qty, 0)
+      const total = basket.checkout_total_price
       const eligible = total >= minimum
       const unavailableThreshold = 10000
       const unavailableItems = items.filter(i => i.price >= unavailableThreshold)
@@ -209,8 +216,7 @@ mcp.addTool({
       const slots = await picnic.getDeliverySlots()
       if (slots.length === 0) return 'Geen bezorgtijden beschikbaar.'
       return slots.map((s, i) => {
-        const isGreen = (s.slot_characteristics ?? []).some(c => /green|eco|groen/i.test(c))
-        const greenLabel = isGreen ? ' 🌱' : ''
+        const greenLabel = s.is_green ? ' 🌱 groenste keuze' : ''
         return `${i}: ${s.slot_id} | ${s.window_start} – ${s.window_end}${greenLabel}`
       }).join('\n')
     } catch (err) {
@@ -260,7 +266,7 @@ mcp.addTool({
 
       // Basket section
       const basketItems = parseBasketItems(basket)
-      const basketTotal = basketItems.reduce((sum, i) => sum + i.price * i.qty, 0)
+      const basketTotal = basket.checkout_total_price
       const basketItemCount = basketItems.reduce((sum, i) => sum + i.qty, 0)
 
       lines.push('### Mandje')
