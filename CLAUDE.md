@@ -62,12 +62,28 @@ De sessie wordt opgeslagen in `.picnic-session` en hergebruikt bij herstart.
 - Alleen de ~10 uitgelichte recepten van de Picnic homepage zijn beschikbaar; er is geen zoekfunctie voor recepten.
 - `.picnic-session` bevat je auth token — nooit committen (staat in `.gitignore`).
 
+## Bekende technical debt
+
+### confirm_order werkt niet via automatisch incasso
+
+`confirmOrder` faalt omdat Picnic een iDEAL checkout-stap vereist vóór de eerste bevestiging. Na de eerste betaling zou automatisch incasso actief worden, maar dit blijkt in de praktijk niet te werken — ook niet in de Picnic app zelf. De `payment.getPaymentProfile` API laat zien dat alleen iDEAL beschikbaar is als betaalmethode (`available_payment_methods: []`, geen incasso-optie).
+
+Mogelijk vereist Picnic een aparte activatiestap voor automatisch incasso die niet via de API beschikbaar is. Voorlopig is `confirm_order` als tool beschikbaar maar zal het mislukken met een API-fout. Zie ook `src/picnic.ts` voor de TODO-comment.
+
 ## API overzicht (picnic-api v4)
 
 **Auth:** `login`, `generate2FACode('SMS')`, `verify2FACode(code)`
 
 **Cart:** `getCart`, `addProductToCart`, `removeProductFromCart`, `clearCart`, `getDeliverySlots`, `setDeliverySlot`, `getMinimumOrderValue`, `confirmOrder(orderId)` ⚠️
 
-**Catalog:** `search(query)`
+**Catalog:** `search(query)`, `getSuggestions(query)`, `getProductDetails(id)`, `getProductDetailsPage(id)`
 
-**App:** `getPage('home_page_root')`, `getPage('selling-group-details-page?selling_group_id=X')`
+**Delivery:** `getDeliveries(filter?)`, `getDelivery(id)`, `getDeliveryPosition(id)`, `getDeliveryScenario(id)`
+
+**Payment:** `getPaymentProfile()`, `getWalletTransactions(page)`, `getWalletTransactionDetails(id)`
+
+**Recipe:** `getRecipesPage()`, `getRecipeDetailsPage(id)`, `addProductToRecipe(productId, recipeId, sectionId?, count?)`
+
+**User:** `getUserDetails()`, `getUserInfo()`, `getProfileMenu()`
+
+**App:** `getBootstrapData()`, `getPage(pageId)` — bekende page IDs: `home_page_root`, `purchases-page-root`, `meals-page-root`, `slot-selector-root`, `category-tree-root`, `search-page-results?search_term=X`, `product-details-page-root?id=X`, `selling-group-details-page?selling_group_id=X`

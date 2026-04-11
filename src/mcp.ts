@@ -407,7 +407,7 @@ mcp.addTool({
       let added = 0
       for (const productId of recipe.productIds) {
         try {
-          await picnic.addToBasket(productId, 1)
+          await picnic.addRecipeProductToBasket(productId, recipe_id)
           log.push(`✓ ${productId}`)
           added++
         } catch (err) {

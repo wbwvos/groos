@@ -97,6 +97,10 @@ export class PicnicService {
     await this.client.cart.addProductToCart(productId, quantity)
   }
 
+  async addRecipeProductToBasket(productId: string, recipeId: string, quantity: number = 1): Promise<void> {
+    await this.client.recipe.addProductToRecipe(productId, recipeId, undefined, quantity)
+  }
+
   async removeFromBasket(productId: string, quantity: number = 1): Promise<void> {
     await this.client.cart.removeProductFromCart(productId, quantity)
   }
