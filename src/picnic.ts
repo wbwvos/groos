@@ -99,7 +99,27 @@ export class PicnicService {
     await this.client.cart.addProductToCart(productId, quantity)
   }
 
-async removeFromBasket(productId: string, quantity: number = 1): Promise<void> {
+  async assignSellingGroupToBasket(
+    sellingGroupId: string,
+    ingredientIds: string[],
+    portions: number = 4,
+  ): Promise<void> {
+    await (this.client as any).sendRequest(
+      'POST',
+      '/pages/task/assign-selling-group-to-basket',
+      {
+        payload: {
+          day_offset: 999,
+          portions,
+          selected_components_ids: ingredientIds,
+          selling_group_id: sellingGroupId,
+        },
+      },
+      true,
+    )
+  }
+
+  async removeFromBasket(productId: string, quantity: number = 1): Promise<void> {
     await this.client.cart.removeProductFromCart(productId, quantity)
   }
 

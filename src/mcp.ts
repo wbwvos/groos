@@ -401,8 +401,9 @@ mcp.addTool({
   description: 'Voeg alle ingrediënten van een Picnic recept toe aan het mandje',
   parameters: z.object({
     recipe_id: z.string().describe('Recept ID uit get_weekly_recipes'),
+    portions: z.number().int().min(1).max(12).optional().describe('Aantal porties (standaard: 4)'),
   }),
-  execute: async ({ recipe_id }) => {
+  execute: async ({ recipe_id, portions = 4 }) => {
     try {
       const authErr = authGuard(); if (authErr) return authErr
       const recipes = await picnic.getWeeklyRecipes()
@@ -413,26 +414,21 @@ mcp.addTool({
       const cupboardIngredients = recipe.ingredients.filter(i => i.ingredientType === 'CUPBOARD')
       const variationIngredients = recipe.ingredients.filter(i => i.ingredientType === 'VARIATION')
 
-      const log: string[] = [`Ingrediënten toevoegen voor: ${recipe.name}`]
-      let added = 0
-      for (const ingredient of coreIngredients) {
-        try {
-          await picnic.addToBasket(ingredient.sellingUnitId)
-          log.push(`✓ ${ingredient.sellingUnitId} (€${(ingredient.price / 100).toFixed(2)})`)
-          added++
-        } catch (err) {
-          log.push(`✗ ${ingredient.sellingUnitId}: ${String(err)}`)
-        }
-      }
-      log.push(`\n${added}/${coreIngredients.length} ingrediënten toegevoegd.`)
+      // Use the selling group task endpoint — preserves recipe context on the order
+      const coreIngredientIds = [...new Set(coreIngredients.map(i => i.ingredientId).filter(Boolean))]
+      await picnic.assignSellingGroupToBasket(recipe.id, coreIngredientIds, portions)
+
+      const log: string[] = [
+        `✓ ${recipe.name} toegevoegd (${portions} porties, ${coreIngredients.length} ingrediënten)`,
+      ]
 
       if (cupboardIngredients.length > 0) {
-        log.push('\n🏠 Uit eigen keuken (niet toegevoegd — heb je dit waarschijnlijk al):')
+        log.push('\nUit eigen keuken (niet toegevoegd — heb je dit waarschijnlijk al):')
         cupboardIngredients.forEach(i => log.push(`  - ${i.sellingUnitId} (€${(i.price / 100).toFixed(2)})`))
       }
 
       if (variationIngredients.length > 0) {
-        log.push('\n💡 Variatietips (optioneel, niet toegevoegd):')
+        log.push('\nVariatietips (optioneel, niet toegevoegd):')
         variationIngredients.forEach(i => log.push(`  - ${i.sellingUnitId} (€${(i.price / 100).toFixed(2)}) — voeg toe via add_to_basket als gewenst`))
       }
 
