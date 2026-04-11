@@ -33,18 +33,20 @@ export interface DeliverySlot {
   is_green?: boolean
 }
 
-export interface UnavailableIngredient {
-  id: string
-  name: string
-  alternatives: Product[]
+export type IngredientType = 'CORE' | 'CUPBOARD' | 'VARIATION'
+
+export interface RecipeIngredient {
+  sellingUnitId: string
+  ingredientId: string
+  ingredientType: IngredientType
+  price: number
 }
 
 export interface Recipe {
   id: string
   name: string
   cookingTime: string | null
-  productIds: string[]
-  unavailable: UnavailableIngredient[]
+  ingredients: RecipeIngredient[]
 }
 
 export class PicnicService {
@@ -97,17 +99,7 @@ export class PicnicService {
     await this.client.cart.addProductToCart(productId, quantity)
   }
 
-  async addRecipeProductToBasket(productId: string, recipeId: string, quantity: number = 1): Promise<void> {
-    try {
-      await this.client.recipe.addProductToRecipe(productId, recipeId, undefined, quantity)
-    } catch {
-      // Picnic valideert het recipe_id server-side — als het geen geldig recipe ID is
-      // (bijv. een selling group ID uit de home page), valt terug op gewoon toevoegen.
-      await this.client.cart.addProductToCart(productId, quantity)
-    }
-  }
-
-  async removeFromBasket(productId: string, quantity: number = 1): Promise<void> {
+async removeFromBasket(productId: string, quantity: number = 1): Promise<void> {
     await this.client.cart.removeProductFromCart(productId, quantity)
   }
 
@@ -200,43 +192,36 @@ export class PicnicService {
         const timeMatch = pageJson.match(/"(\d+ min)"/)
         const cookingTime = timeMatch ? timeMatch[1] : null
 
-        // Build map of {id -> {name, price}} for all selling units in the page
-        const unitMap = new Map<string, { name: string; price: number }>()
-        const unitMatches = pageJson.matchAll(/"id"\s*:\s*"(s\d+)"[^}]{0,300}"name"\s*:\s*"([^"]+)"[^}]{0,300}"price"\s*:\s*(\d+)/g)
-        for (const m of unitMatches) unitMap.set(m[1], { name: m[2], price: parseInt(m[3], 10) })
+        // Parse ingredientsState — bevat type (CORE/CUPBOARD/VARIATION) per ingredient
+        const ingredientsState: any[] | null = this.findIngredientsState(page)
+        let ingredients: RecipeIngredient[] = []
 
-        // Product IDs: sellingUnitIds arrays (s-format), split into available/unavailable
-        const sellingUnitMatches = pageJson.matchAll(/"sellingUnitIds"\s*:\s*\[([^\]]+)\]/g)
-        const productIds = new Set<string>()
-        const unavailableIds = new Set<string>()
-        for (const match of sellingUnitMatches) {
-          const ids = match[1].matchAll(/"(s\d+)"/g)
-          for (const idMatch of ids) {
-            const pid = idMatch[1]
-            const unit = unitMap.get(pid)
-            if (unit && unit.price >= 10000) {
-              unavailableIds.add(pid)
-            } else {
-              productIds.add(pid)
+        if (ingredientsState) {
+          for (const item of ingredientsState) {
+            const type: IngredientType = item.ingredientType === 'CUPBOARD' ? 'CUPBOARD'
+              : item.ingredientType === 'VARIATION' ? 'VARIATION'
+              : 'CORE'
+            for (const [sellingUnitId, unit] of Object.entries(item.sellingUnits as Record<string, any>)) {
+              ingredients.push({
+                sellingUnitId,
+                ingredientId: item.ingredientId,
+                ingredientType: type,
+                price: unit.price ?? 0,
+              })
             }
           }
-        }
-
-        // Search alternatives for unavailable ingredients
-        const unavailable: UnavailableIngredient[] = []
-        for (const pid of unavailableIds) {
-          const unit = unitMap.get(pid)
-          const ingredientName = unit?.name ?? pid
-          try {
-            const alts = await this.search(ingredientName)
-            const validAlts = alts.filter(a => a.price < 10000).slice(0, 3)
-            unavailable.push({ id: pid, name: ingredientName, alternatives: validAlts })
-          } catch {
-            unavailable.push({ id: pid, name: ingredientName, alternatives: [] })
+        } else {
+          // Fallback: parse sellingUnitIds uit JSON als ingredientsState niet gevonden wordt
+          const suMatch = pageJson.match(/"sellingUnitIds"\s*:\s*\[([^\]]+)\]/)
+          if (suMatch) {
+            const ids = [...suMatch[1].matchAll(/"(s\d+)"/g)].map(m => m[1])
+            ingredients = ids.map(sellingUnitId => ({
+              sellingUnitId, ingredientId: '', ingredientType: 'CORE' as IngredientType, price: 0,
+            }))
           }
         }
 
-        recipes.push({ id, name, cookingTime, productIds: [...productIds], unavailable })
+        recipes.push({ id, name, cookingTime, ingredients })
       } catch {
         // Skip recipes that fail to load
       }
@@ -256,6 +241,16 @@ export class PicnicService {
         throw err
       }
     }
+  }
+
+  private findIngredientsState(obj: any): any[] | null {
+    if (!obj || typeof obj !== 'object') return null
+    if (Array.isArray(obj.ingredientsState) && obj.ingredientsState.length > 0) return obj.ingredientsState
+    for (const v of Object.values(obj)) {
+      const result = this.findIngredientsState(v)
+      if (result) return result
+    }
+    return null
   }
 
   async verify2FA(code: string): Promise<void> {

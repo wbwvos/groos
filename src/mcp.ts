@@ -381,9 +381,15 @@ mcp.addTool({
       const authErr = authGuard(); if (authErr) return authErr
       const recipes = await picnic.getWeeklyRecipes()
       if (recipes.length === 0) return 'Geen recepten gevonden deze week.'
-      return recipes.map(r =>
-        `ID: ${r.id} | ${r.name}${r.cookingTime ? ` (${r.cookingTime})` : ''} | ${r.productIds.length} ingrediënten`
-      ).join('\n')
+      return recipes.map(r => {
+        const core = r.ingredients.filter(i => i.ingredientType === 'CORE').length
+        const cupboard = r.ingredients.filter(i => i.ingredientType === 'CUPBOARD').length
+        const variation = r.ingredients.filter(i => i.ingredientType === 'VARIATION').length
+        const parts = [`${core} ingrediënten`]
+        if (cupboard > 0) parts.push(`${cupboard} uit eigen keuken`)
+        if (variation > 0) parts.push(`${variation} variatietip`)
+        return `ID: ${r.id} | ${r.name}${r.cookingTime ? ` (${r.cookingTime})` : ''} | ${parts.join(', ')}`
+      }).join('\n')
     } catch (err) {
       return `Fout bij ophalen recepten: ${String(err)}`
     }
@@ -403,31 +409,31 @@ mcp.addTool({
       const recipe = recipes.find(r => r.id === recipe_id)
       if (!recipe) return `Recept ${recipe_id} niet gevonden. Gebruik get_weekly_recipes voor de huidige lijst.`
 
+      const coreIngredients = recipe.ingredients.filter(i => i.ingredientType === 'CORE')
+      const cupboardIngredients = recipe.ingredients.filter(i => i.ingredientType === 'CUPBOARD')
+      const variationIngredients = recipe.ingredients.filter(i => i.ingredientType === 'VARIATION')
+
       const log: string[] = [`Ingrediënten toevoegen voor: ${recipe.name}`]
       let added = 0
-      for (const productId of recipe.productIds) {
+      for (const ingredient of coreIngredients) {
         try {
-          await picnic.addRecipeProductToBasket(productId, recipe_id)
-          log.push(`✓ ${productId}`)
+          await picnic.addToBasket(ingredient.sellingUnitId)
+          log.push(`✓ ${ingredient.sellingUnitId} (€${(ingredient.price / 100).toFixed(2)})`)
           added++
         } catch (err) {
-          log.push(`✗ ${productId}: ${String(err)}`)
+          log.push(`✗ ${ingredient.sellingUnitId}: ${String(err)}`)
         }
       }
-      log.push(`\n${added}/${recipe.productIds.length} ingrediënten toegevoegd.`)
+      log.push(`\n${added}/${coreIngredients.length} ingrediënten toegevoegd.`)
 
-      if (recipe.unavailable.length > 0) {
-        log.push('\nNiet beschikbaar — mogelijke alternatieven:')
-        for (const u of recipe.unavailable) {
-          log.push(`\n✗ ${u.name}`)
-          if (u.alternatives.length > 0) {
-            u.alternatives.forEach(a =>
-              log.push(`  → ${a.id} | €${(a.price / 100).toFixed(2)} | ${a.name}${a.unitQuantity ? ` [${a.unitQuantity}]` : ''}`)
-            )
-          } else {
-            log.push('  (geen alternatieven gevonden)')
-          }
-        }
+      if (cupboardIngredients.length > 0) {
+        log.push('\n🏠 Uit eigen keuken (niet toegevoegd — heb je dit waarschijnlijk al):')
+        cupboardIngredients.forEach(i => log.push(`  - ${i.sellingUnitId} (€${(i.price / 100).toFixed(2)})`))
+      }
+
+      if (variationIngredients.length > 0) {
+        log.push('\n💡 Variatietips (optioneel, niet toegevoegd):')
+        variationIngredients.forEach(i => log.push(`  - ${i.sellingUnitId} (€${(i.price / 100).toFixed(2)}) — voeg toe via add_to_basket als gewenst`))
       }
 
       return log.join('\n')
