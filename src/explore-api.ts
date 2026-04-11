@@ -137,7 +137,9 @@ async function main() {
   // Als er deliveries zijn, haal de eerste op
   const deliveriesResult = results.find(r => r.endpoint.startsWith('delivery.getDeliveries'))
   const deliveriesArray = deliveriesResult?.output && Array.isArray(deliveriesResult.output) ? deliveriesResult.output : []
-  const sampleDeliveryId = deliveriesArray.length > 0 ? (deliveriesArray[0] as { id: string }).id : undefined
+  const sampleDeliveryId = deliveriesArray.length > 0
+    ? ((deliveriesArray[0] as any).delivery_id ?? (deliveriesArray[0] as any).id)
+    : undefined
 
   if (sampleDeliveryId) {
     results.push(await call(

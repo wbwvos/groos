@@ -11,6 +11,7 @@
     "cli": "tsx src/cli.ts",
     "mcp": "tsx src/mcp.ts",
     "explore": "tsx src/explore-api.ts",
+    "explore:docs": "tsx scripts/generate-api-docs.ts",
     "test": "vitest run",
     "test:watch": "vitest"
   },
