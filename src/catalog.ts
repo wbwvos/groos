@@ -11,6 +11,7 @@ export interface CatalogEntry {
   cookingTime?: string | null   // undefined = details not fetched; null = no cooking time available
   ingredients?: RecipeIngredient[]
   fetchedAt?: number
+  lastUsedAt?: number           // last time added to basket via add_recipe_to_basket
 }
 
 export interface RecipeCatalog {

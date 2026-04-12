@@ -323,7 +323,7 @@ mcp.addTool({
       }
       lines.push('')
 
-      // Weekrecepten section
+      // Weekrecepten section — THIS_WEEK prominent, then a few NEW/SAVED suggestions
       lines.push('### Weekrecepten (Picnic uitgelicht)')
       if (weeklyRecipes.length === 0) {
         lines.push('Geen recepten beschikbaar.\n')
@@ -331,6 +331,37 @@ mcp.addTool({
         weeklyRecipes.forEach(r => {
           const core = r.ingredients.filter(i => i.ingredientType === 'CORE').length
           lines.push(`- ${r.id} | ${r.name}${r.cookingTime ? ` (${r.cookingTime})` : ''} | ${core} ingrediënten`)
+        })
+        lines.push('')
+      }
+
+      // Extra suggesties uit NEW/SAVED — niet recent gebruikt (> 14 dagen), niet in THIS_WEEK
+      const thisWeekIds = new Set(weeklyRecipes.map(r => r.id))
+      const TWO_WEEKS_MS = 14 * 24 * 60 * 60 * 1000
+      const extraSuggestions = Object.values(catalog.entries)
+        .filter(e =>
+          !thisWeekIds.has(e.id) &&
+          (e.categories.includes('NEW_RECIPES') || e.categories.includes('SAVED_RECIPES')) &&
+          (!e.lastUsedAt || now - e.lastUsedAt > TWO_WEEKS_MS)
+        )
+        .sort((a, b) => {
+          // Prefer SAVED over NEW (user explicitly saved these), then least recently used
+          const aSaved = a.categories.includes('SAVED_RECIPES') ? 0 : 1
+          const bSaved = b.categories.includes('SAVED_RECIPES') ? 0 : 1
+          if (aSaved !== bSaved) return aSaved - bSaved
+          return (a.lastUsedAt ?? 0) - (b.lastUsedAt ?? 0)
+        })
+        .slice(0, 3)
+
+      if (extraSuggestions.length > 0) {
+        lines.push('### Extra suggesties (opgeslagen & nieuw)')
+        extraSuggestions.forEach(e => {
+          const src = e.categories.includes('SAVED_RECIPES') ? 'opgeslagen' : 'nieuw'
+          const detail = e.cookingTime ? ` (${e.cookingTime})` : ''
+          const lastUsed = e.lastUsedAt
+            ? `, laatst: ${new Date(e.lastUsedAt).toLocaleDateString('nl-NL')}`
+            : ''
+          lines.push(`- ${e.id} | ${e.name}${detail} | ${src}${lastUsed}`)
         })
         lines.push('')
       }
@@ -478,6 +509,7 @@ mcp.addTool({
       const authErr = authGuard(); if (authErr) return authErr
       const catalog = loadCatalog()
       const recipe = await picnic.getCatalogRecipeDetail(recipe_id, catalog)
+      if (catalog.entries[recipe_id]) catalog.entries[recipe_id].lastUsedAt = Date.now()
       saveCatalog(catalog)
 
       const coreIngredients = recipe.ingredients.filter(i => i.ingredientType === 'CORE')
