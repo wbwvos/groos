@@ -245,6 +245,77 @@ export class PicnicService {
     return recipes
   }
 
+  /**
+   * Refresh the full catalog index: all segment pages + cookbook + all category pages.
+   * Tier-1 only (names + categories, no ingredients). Sets indexRefreshedAt.
+   * Suitable for monthly background refresh — ~50 API calls with 200ms throttle.
+   */
+  async refreshCatalogIndex(catalog: RecipeCatalog, onProgress?: (msg: string) => void): Promise<void> {
+    const log = onProgress ?? (() => {})
+
+    // Segment pages
+    for (const segType of ['THIS_WEEK_RECIPES', 'NEW_RECIPES', 'SAVED_RECIPES']) {
+      const stubs = await this.fetchPageStubs(`see-more-recipes-page?segmentType=${segType}`)
+      stubs.forEach(s => upsertIndex(catalog, s.id, s.name, segType))
+      log(`${segType}: ${stubs.length}`)
+      await this.sleep(200)
+    }
+
+    // Cookbook
+    const cookbookStubs = await this.fetchPageStubs('cookbook-page')
+    cookbookStubs.forEach(s => upsertIndex(catalog, s.id, s.name, 'cookbook'))
+    log(`cookbook: ${cookbookStubs.length}`)
+
+    // Category pages — extract dynamically from cookbook deep links, fall back to known list
+    const cookbookPage = await this.client.app.getPage('cookbook-page').catch(() => null)
+    const cookbookJson = cookbookPage ? JSON.stringify(cookbookPage) : ''
+    const dynamicCats = [...new Set(
+      [...cookbookJson.matchAll(/id=(recipe[_-]cat[^",'\;\\]+)/g)].map(m => m[1])
+    )]
+    const knownCats = [
+      'recipe_cattree_20minuten', 'recipe_cattree_weinigsnijwerk', 'recipe_cattree_eenpans',
+      'recipe-cattree-thema-kids', 'recipe_cattree_it_pasta', 'recipe-cattree-ravioli',
+      'recipe-cattree-pasta-gnocchi-orzo', 'recipe_cattree_lasagne', 'recipe_cattree_oos_noedels',
+      'recipe_cattree_oos_rijst', 'recipe_cattree_it_risotto', 'recipe-cattree-type-gerecht-curry',
+      'recipe_cattree_mid_granen', 'recipe_cattree_hol_stamppot', 'recipe_cattree_hol_AGV',
+      'recipe_cattree_mex_wraps', 'recipe_cattree_platbrood', 'recipe_cattree_it_pizza',
+      'recipe_cattree_burgers', 'recipe_cattree_oven_schotel', 'recipe-cattree-traybakes',
+      'recipe_cattree_plaattaart', 'recipe_cattree_oven_quiche', 'recipe_cattree_airfryer',
+      'recipe_cattree_soep', 'recipe-cattree-type-gerecht-salades', 'recipe_cattree_vega',
+      'recipe_cattree_vegan', 'recipe_cattree_groente', 'recipe_cattree_koolhydraatarm',
+      'recipe_cattree_calorieen', 'recipe_cattree_zwanger', 'recipe_cattree_ontbijt',
+      'recipe_cattree_brunch', 'recipe-cattree-momenten-borrel', 'recipe-cattree-momenten-zoet',
+      'recipe_cattree_drankjes', 'recipe_cattree_bbq', 'recipe-cattree-momenten-feest',
+      'recipe-cattree-budget', 'recipe_cattree_seizoen', 'recipe_cattree_basisrecepten',
+      'recipe_cattree_verspakketten', 'recipe-cattree-jamie-oliver', 'recipe-cattree-eefkooktzo',
+      'recipe_cattree_24kitchen',
+    ]
+    const catPages = dynamicCats.length > 10 ? dynamicCats : knownCats
+
+    await this.sleep(200)
+    for (const pageId of catPages) {
+      const stubs = await this.fetchPageStubs(pageId)
+      if (stubs.length > 0) stubs.forEach(s => upsertIndex(catalog, s.id, s.name, pageId))
+      await this.sleep(200)
+    }
+    log(`categorieën: ${catPages.length} pages`)
+
+    catalog.indexRefreshedAt = Date.now()
+  }
+
+  private async fetchPageStubs(pageId: string): Promise<Array<{ id: string; name: string }>> {
+    try {
+      const page: any = await this.client.app.getPage(pageId)
+      return extractRecipeStubs(JSON.stringify(page))
+    } catch {
+      return []
+    }
+  }
+
+  private async sleep(ms: number): Promise<void> {
+    return new Promise(r => setTimeout(r, ms))
+  }
+
   /** Fetch recipe IDs + names from a see-more-recipes-page segmentType. */
   private async fetchSegmentStubs(segmentType: string): Promise<Array<{ id: string; name: string }>> {
     try {

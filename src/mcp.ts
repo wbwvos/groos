@@ -251,7 +251,28 @@ mcp.addTool({
     try {
       const authErr = authGuard(); if (authErr) return authErr
 
-      // Run all operations in parallel
+      // Load catalog and check refresh TTLs
+      const catalog = loadCatalog()
+      const now = Date.now()
+      const WEEK_MS = 7 * 24 * 60 * 60 * 1000
+      const MONTH_MS = 30 * 24 * 60 * 60 * 1000
+      const catalogNotes: string[] = []
+
+      // Monthly: full index refresh (fire-and-forget — runs in background)
+      const indexStale = !catalog.indexRefreshedAt || now - catalog.indexRefreshedAt > MONTH_MS
+      if (indexStale) {
+        catalogNotes.push('_Catalogus wordt op de achtergrond vernieuwd (maandelijkse update)._')
+        picnic.refreshCatalogIndex(catalog)
+          .then(() => saveCatalog(catalog))
+          .catch(() => {})
+      }
+
+      // Weekly: get fresh THIS_WEEK/NEW/SAVED recipes — also saves to catalog
+      const weeklyStale = !catalog.weeklyRefreshedAt || now - catalog.weeklyRefreshedAt > WEEK_MS
+      const weeklyRecipes = await picnic.getWeeklyRecipes()
+      if (weeklyStale) saveCatalog(catalog)
+
+      // Run remaining operations in parallel
       const [staples, knownMeals, household, basket] = await Promise.all([
         loadStaples(),
         loadMeals(),
@@ -264,6 +285,8 @@ mcp.addTool({
       // Date header
       const dateStr = new Date().toLocaleDateString('nl-NL', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
       lines.push(`## Weekoverzicht – ${dateStr}\n`)
+
+      if (catalogNotes.length > 0) lines.push(catalogNotes.join('\n') + '\n')
 
       // Basket section
       const basketItems = parseBasketItems(basket)
@@ -300,6 +323,18 @@ mcp.addTool({
       }
       lines.push('')
 
+      // Weekrecepten section
+      lines.push('### Weekrecepten (Picnic uitgelicht)')
+      if (weeklyRecipes.length === 0) {
+        lines.push('Geen recepten beschikbaar.\n')
+      } else {
+        weeklyRecipes.forEach(r => {
+          const core = r.ingredients.filter(i => i.ingredientType === 'CORE').length
+          lines.push(`- ${r.id} | ${r.name}${r.cookingTime ? ` (${r.cookingTime})` : ''} | ${core} ingrediënten`)
+        })
+        lines.push('')
+      }
+
       // Maaltijden section
       lines.push('### Maaltijden (suggesties)')
       knownMeals.forEach(m => lines.push(`- ${m}`))
@@ -312,7 +347,7 @@ mcp.addTool({
       // Volgende stappen section
       lines.push('### Volgende stappen')
       lines.push('1. Voeg staples toe via `add_to_basket` (gebruik bovenstaande IDs)')
-      lines.push('2. Kies maaltijden en voeg ingrediënten toe via `add_recipe_to_basket` of `search_product`')
+      lines.push('2. Kies maaltijden via weekrecepten of `search_recipe`, voeg toe via `add_recipe_to_basket`')
       lines.push('3. Controleer mandje met `get_basket`')
       lines.push('4. Controleer minimum bedrag en bezorgadres met `check_order_eligibility`')
       lines.push('5. Bevestig bestelling met `confirm_order`')
