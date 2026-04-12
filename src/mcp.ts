@@ -2,6 +2,7 @@ import { FastMCP } from 'fastmcp'
 import { z } from 'zod'
 import { createPicnicService } from './picnic.js'
 import { loadStaples, loadMeals, loadHousehold, saveStaples } from './config.js'
+import { loadCatalog, saveCatalog, searchCatalog, catalogEntryToRecipe } from './catalog.js'
 
 const mcp = new FastMCP({ name: 'groos', version: '0.1.0' })
 const picnic = createPicnicService()
@@ -373,6 +374,40 @@ mcp.addTool({
 })
 
 mcp.addTool({
+  name: 'search_recipe',
+  description: 'Zoek recepten in de lokale catalogus op naam of categorie. Geen API call — instant resultaat. Categorieën: pasta, noedels, rijst, stamppot, pizza, burgers, vega, vegan, airfryer, soep, 20minuten, eenpans, budget, en meer. Gebruik get_weekly_recipes voor de huidige weekrecepten met ingrediënten.',
+  parameters: z.object({
+    query: z.string().optional().describe('Zoekterm in receptnaam, bijv. "kip" of "pasta"'),
+    category: z.string().optional().describe('Categorie-substring, bijv. "pasta", "20minuten", "vega", "noedels"'),
+    limit: z.number().int().min(1).max(50).default(20),
+  }),
+  execute: async ({ query, category, limit }) => {
+    const catalog = loadCatalog()
+    const total = Object.keys(catalog.entries).length
+    if (total === 0) {
+      return 'Catalogus is leeg. Voer eerst "npm run update-recipes" uit om de catalogus te vullen.'
+    }
+    const results = searchCatalog(catalog, { query, category, limit })
+    if (results.length === 0) {
+      return `Geen recepten gevonden${query ? ` voor "${query}"` : ''}${category ? ` in categorie "${category}"` : ''}. (catalogus: ${total} recepten)`
+    }
+    const lines = results.map(r => {
+      const cats = r.categories
+        .filter(c => c !== 'THIS_WEEK')
+        .map(c => c.replace('recipe_cattree_', '').replace('recipe-cattree-', ''))
+        .slice(0, 3)
+        .join(', ')
+      const detail = r.ingredients !== undefined
+        ? `${r.cookingTime ?? '?'}, ${r.ingredients.filter(i => i.ingredientType === 'CORE').length} ingrediënten`
+        : 'details nog niet geladen'
+      return `ID: ${r.id} | ${r.name} (${detail}) | ${cats}`
+    })
+    lines.unshift(`${results.length} van ${total} recepten:`)
+    return lines.join('\n')
+  }
+})
+
+mcp.addTool({
   name: 'get_weekly_recipes',
   description: 'Haal de wekelijks uitgelichte recepten van Picnic op',
   parameters: z.object({}),
@@ -398,17 +433,17 @@ mcp.addTool({
 
 mcp.addTool({
   name: 'add_recipe_to_basket',
-  description: 'Voeg alle ingrediënten van een Picnic recept toe aan het mandje',
+  description: 'Voeg alle ingrediënten van een Picnic recept toe aan het mandje. Werkt met elk recept-ID uit get_weekly_recipes of search_recipe.',
   parameters: z.object({
-    recipe_id: z.string().describe('Recept ID uit get_weekly_recipes'),
+    recipe_id: z.string().describe('Recept ID uit get_weekly_recipes of search_recipe'),
     portions: z.number().int().min(1).max(12).optional().describe('Aantal porties (standaard: 4)'),
   }),
   execute: async ({ recipe_id, portions = 4 }) => {
     try {
       const authErr = authGuard(); if (authErr) return authErr
-      const recipes = await picnic.getWeeklyRecipes()
-      const recipe = recipes.find(r => r.id === recipe_id)
-      if (!recipe) return `Recept ${recipe_id} niet gevonden. Gebruik get_weekly_recipes voor de huidige lijst.`
+      const catalog = loadCatalog()
+      const recipe = await picnic.getCatalogRecipeDetail(recipe_id, catalog)
+      saveCatalog(catalog)
 
       const coreIngredients = recipe.ingredients.filter(i => i.ingredientType === 'CORE')
       const cupboardIngredients = recipe.ingredients.filter(i => i.ingredientType === 'CUPBOARD')

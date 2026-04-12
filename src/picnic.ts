@@ -2,6 +2,7 @@ import PicnicClient from 'picnic-api'
 import dotenv from 'dotenv'
 import { readFileSync, writeFileSync, existsSync } from 'fs'
 import { resolve } from 'path'
+import { type RecipeCatalog, upsertIndex, upsertDetail, catalogEntryToRecipe, extractRecipeStubs } from './catalog.js'
 
 dotenv.config({ path: resolve(import.meta.dirname, '../.env') })
 
@@ -53,8 +54,6 @@ export class PicnicService {
   private client: InstanceType<typeof PicnicClient>
   private username: string
   private password: string
-  private recipesCache: { recipes: Recipe[]; fetchedAt: number } | null = null
-  private readonly CACHE_TTL_MS = 10 * 60 * 1000 // 10 minutes
 
   constructor(username: string, password: string, countryCode: 'NL' | 'DE' = 'NL') {
     const savedKey = loadAuthKey()
@@ -183,72 +182,133 @@ export class PicnicService {
   }
 
   async getWeeklyRecipes(): Promise<Recipe[]> {
-    const now = Date.now()
-    if (this.recipesCache && now - this.recipesCache.fetchedAt < this.CACHE_TTL_MS) {
-      return this.recipesCache.recipes
+    const { loadCatalog, saveCatalog } = await import('./catalog.js')
+    const catalog = loadCatalog()
+    const WEEK_MS = 7 * 24 * 60 * 60 * 1000
+    const stale = !catalog.weeklyRefreshedAt || Date.now() - catalog.weeklyRefreshedAt > WEEK_MS
+    if (stale) {
+      const recipes = await this.refreshWeeklyRecipes(catalog)
+      saveCatalog(catalog)
+      return recipes
     }
-    const homePage: any = await this.client.app.getPage('home_page_root')
-    const homeJson = JSON.stringify(homePage)
+    const cached = Object.values(catalog.entries)
+      .filter(e => e.categories.includes('THIS_WEEK') && e.ingredients !== undefined)
+      .map(catalogEntryToRecipe)
+    return cached.length > 0 ? cached : this.refreshWeeklyRecipes(catalog).then(async r => {
+      saveCatalog(catalog)
+      return r
+    })
+  }
 
-    // Extract recipe IDs from Snowplow analytics events
-    const recipeIdMatches = homeJson.matchAll(/"recipe_id"\s*:\s*"([^"]+)"/g)
-    const recipeIds = [...new Set([...recipeIdMatches].map(m => m[1]))]
+  /** Fetch THIS_WEEK recipes with full details; index NEW + SAVED as Tier-1 only. */
+  async refreshWeeklyRecipes(catalog: RecipeCatalog): Promise<Recipe[]> {
+    // Clear old THIS_WEEK tags so stale entries don't linger
+    for (const entry of Object.values(catalog.entries)) {
+      entry.categories = entry.categories.filter(c => c !== 'THIS_WEEK')
+    }
 
+    // Fetch THIS_WEEK IDs
+    const thisWeekStubs = await this.fetchSegmentStubs('THIS_WEEK_RECIPES')
+
+    // Index NEW and SAVED as Tier-1 (fire-and-forget errors)
+    await Promise.allSettled([
+      this.fetchSegmentStubs('NEW_RECIPES').then(stubs =>
+        stubs.forEach(s => upsertIndex(catalog, s.id, s.name, 'NEW_RECIPES'))
+      ),
+      this.fetchSegmentStubs('SAVED_RECIPES').then(stubs =>
+        stubs.forEach(s => upsertIndex(catalog, s.id, s.name, 'SAVED_RECIPES'))
+      ),
+    ])
+
+    // Fetch full details for THIS_WEEK recipes
     const recipes: Recipe[] = []
-    for (const id of recipeIds) {
+    for (const stub of thisWeekStubs) {
       try {
-        const page: any = await this.client.app.getPage(`selling-group-details-page?selling_group_id=${id}`)
-        const pageJson = JSON.stringify(page)
-
-        // Recipe name: first long markdown string (>20 chars, not a URL)
-        const markdownMatches = pageJson.matchAll(/"markdown"\s*:\s*"([^"]{20,})"/g)
-        const markdownStrings = [...markdownMatches].map(m => m[1].replace(/\\n/g, ' ').trim())
-        const name = markdownStrings.find(s => !s.startsWith('http') && !s.includes('\\') && s.length < 100) ?? id
-
-        // Filter category labels: real recipe names have ≥ 4 words
-        if (name.split(/\s+/).length < 4) continue
-
-        // Cooking time: first "X min" pattern
-        const timeMatch = pageJson.match(/"(\d+ min)"/)
-        const cookingTime = timeMatch ? timeMatch[1] : null
-
-        // Parse ingredientsState — bevat type (CORE/CUPBOARD/VARIATION) per ingredient
-        const ingredientsState: any[] | null = this.findIngredientsState(page)
-        let ingredients: RecipeIngredient[] = []
-
-        if (ingredientsState) {
-          for (const item of ingredientsState) {
-            const type: IngredientType = item.ingredientType === 'CUPBOARD' ? 'CUPBOARD'
-              : item.ingredientType === 'VARIATION' ? 'VARIATION'
-              : 'CORE'
-            for (const [sellingUnitId, unit] of Object.entries(item.sellingUnits as Record<string, any>)) {
-              ingredients.push({
-                sellingUnitId,
-                ingredientId: item.ingredientId,
-                ingredientType: type,
-                price: unit.price ?? 0,
-              })
-            }
-          }
+        let recipe: Recipe
+        if (catalog.entries[stub.id]?.ingredients !== undefined) {
+          recipe = catalogEntryToRecipe(catalog.entries[stub.id])
         } else {
-          // Fallback: parse sellingUnitIds uit JSON als ingredientsState niet gevonden wordt
-          const suMatch = pageJson.match(/"sellingUnitIds"\s*:\s*\[([^\]]+)\]/)
-          if (suMatch) {
-            const ids = [...suMatch[1].matchAll(/"(s\d+)"/g)].map(m => m[1])
-            ingredients = ids.map(sellingUnitId => ({
-              sellingUnitId, ingredientId: '', ingredientType: 'CORE' as IngredientType, price: 0,
-            }))
-          }
+          recipe = await this.fetchRecipeDetail(stub.id)
         }
-
-        recipes.push({ id, name, cookingTime, ingredients })
+        upsertDetail(catalog, recipe, 'THIS_WEEK')
+        // Also ensure THIS_WEEK tag is present (upsertDetail may not add it if entry existed)
+        if (!catalog.entries[stub.id].categories.includes('THIS_WEEK')) {
+          catalog.entries[stub.id].categories.push('THIS_WEEK')
+        }
+        recipes.push(recipe)
       } catch {
         // Skip recipes that fail to load
       }
     }
 
-    this.recipesCache = { recipes, fetchedAt: Date.now() }
+    catalog.weeklyRefreshedAt = Date.now()
     return recipes
+  }
+
+  /** Fetch recipe IDs + names from a see-more-recipes-page segmentType. */
+  private async fetchSegmentStubs(segmentType: string): Promise<Array<{ id: string; name: string }>> {
+    try {
+      const page: any = await this.client.app.getPage(`see-more-recipes-page?segmentType=${segmentType}`)
+      return extractRecipeStubs(JSON.stringify(page))
+    } catch {
+      return []
+    }
+  }
+
+  /** Fetch full recipe details (name, cookingTime, ingredients) for a single ID. */
+  async fetchRecipeDetail(id: string): Promise<Recipe> {
+    const page: any = await this.client.app.getPage(`selling-group-details-page?selling_group_id=${id}`)
+    const pageJson = JSON.stringify(page)
+
+    // Recipe name: first long markdown string (>20 chars, not a URL, ≥4 words)
+    const markdownMatches = pageJson.matchAll(/"markdown"\s*:\s*"([^"]{20,})"/g)
+    const markdownStrings = [...markdownMatches].map(m => m[1].replace(/\\n/g, ' ').trim())
+    const name = markdownStrings.find(s => !s.startsWith('http') && !s.includes('\\') && s.length < 100 && s.split(/\s+/).length >= 4) ?? id
+
+    // Cooking time: first "X min" pattern
+    const timeMatch = pageJson.match(/"(\d+ min)"/)
+    const cookingTime = timeMatch ? timeMatch[1] : null
+
+    // Parse ingredientsState — contains type (CORE/CUPBOARD/VARIATION) per ingredient
+    const ingredientsState: any[] | null = this.findIngredientsState(page)
+    let ingredients: RecipeIngredient[] = []
+
+    if (ingredientsState) {
+      for (const item of ingredientsState) {
+        const type: IngredientType = item.ingredientType === 'CUPBOARD' ? 'CUPBOARD'
+          : item.ingredientType === 'VARIATION' ? 'VARIATION'
+          : 'CORE'
+        for (const [sellingUnitId, unit] of Object.entries(item.sellingUnits as Record<string, any>)) {
+          ingredients.push({
+            sellingUnitId,
+            ingredientId: item.ingredientId,
+            ingredientType: type,
+            price: unit.price ?? 0,
+          })
+        }
+      }
+    } else {
+      // Fallback: parse sellingUnitIds from JSON
+      const suMatch = pageJson.match(/"sellingUnitIds"\s*:\s*\[([^\]]+)\]/)
+      if (suMatch) {
+        const ids = [...suMatch[1].matchAll(/"(s\d+)"/g)].map(m => m[1])
+        ingredients = ids.map(sellingUnitId => ({
+          sellingUnitId, ingredientId: '', ingredientType: 'CORE' as IngredientType, price: 0,
+        }))
+      }
+    }
+
+    return { id, name, cookingTime, ingredients }
+  }
+
+  /** Get recipe details: from disk cache if available, otherwise fetch from API and cache. */
+  async getCatalogRecipeDetail(id: string, catalog: RecipeCatalog): Promise<Recipe> {
+    if (catalog.entries[id]?.ingredients !== undefined) {
+      return catalogEntryToRecipe(catalog.entries[id])
+    }
+    const recipe = await this.fetchRecipeDetail(id)
+    upsertDetail(catalog, recipe)
+    return recipe
   }
 
   async request2FA(): Promise<void> {

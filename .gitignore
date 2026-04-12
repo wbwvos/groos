@@ -3,3 +3,4 @@ dist/
 .env
 .picnic-session
 .worktrees/
+data/
