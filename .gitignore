@@ -6,3 +6,5 @@ dist/
 data/
 api-output/
 TASKS.md
+.claude/
+.remember/

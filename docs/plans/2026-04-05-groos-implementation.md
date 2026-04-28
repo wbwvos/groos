@@ -1,6 +1,6 @@
 # Groos Implementation Plan
 
-> **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
+> Historisch implementatieplan (5 april 2026). Bewaard als referentie; de actuele code kan afwijken — zie `README.md` en `CLAUDE.md` voor de huidige status.
 
 **Goal:** Build a Picnic grocery automation tool — first as a CLI testbed, then as a FastMCP server for use in Claude Code.
 
@@ -21,7 +21,7 @@
 **Step 1: Initialize project**
 
 ```bash
-cd /home/sledder/projects/groos
+cd <repo>
 npm init -y
 ```
 
@@ -703,7 +703,7 @@ mcp.run({ transport: 'stdio' })
 Voeg toe aan `~/.claude/claude_desktop_config.json` (of via `claude mcp add`):
 
 ```bash
-claude mcp add groos -- tsx /home/sledder/projects/groos/src/mcp.ts
+claude mcp add groos -- tsx <repo>/src/mcp.ts
 ```
 
 Of handmatig in `~/.claude.json` of de Claude Code MCP config:
@@ -712,7 +712,7 @@ Of handmatig in `~/.claude.json` of de Claude Code MCP config:
   "mcpServers": {
     "groos": {
       "command": "tsx",
-      "args": ["/home/sledder/projects/groos/src/mcp.ts"]
+      "args": ["<repo>/src/mcp.ts"]
     }
   }
 }

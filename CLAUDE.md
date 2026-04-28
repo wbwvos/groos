@@ -38,7 +38,9 @@ De sessie wordt opgeslagen in `.picnic-session` en hergebruikt bij herstart.
 | `clear_basket` | Maak mandje leeg |
 | `get_basket` | Toon mandje met totaalprijs |
 | `get_weekly_plan` | Toon vaste boodschappen + bekende maaltijden (voor quantity check) |
+| `manage_staples` | Voeg toe / verwijder / wijzig aantallen in `config/staples.yaml` |
 | `get_weekly_recipes` | Toon uitgelichte recepten van Picnic deze week |
+| `search_recipe` | Zoek in lokale recipe-catalog op naam of categorie |
 | `add_recipe_to_basket` | Voeg ingrediënten van een recept toe |
 | `get_delivery_slots` | Beschikbare bezorgtijden |
 | `set_delivery_slot` | Kies bezorgmoment |
@@ -56,10 +58,13 @@ De sessie wordt opgeslagen in `.picnic-session` en hergebruikt bij herstart.
 - Node.js 22+ (via nvm aanbevolen op WSL)
 - Picnic.nl account (Nederland)
 
+## Recipe-catalog
+
+`search_recipe` zoekt in een lokale catalogus (`data/recipe-catalog.json`). Vullen/verversen via `npm run update-recipes`. `get_weekly_plan` ververst automatisch als de catalogus ouder is dan een week.
+
 ## Bekende beperkingen
 
 - Receptparsing is gebaseerd op Picnic's interne app-structuur. Een Picnic-update kan dit breken.
-- Alleen de ~10 uitgelichte recepten van de Picnic homepage zijn beschikbaar; er is geen zoekfunctie voor recepten.
 - `.picnic-session` bevat je auth token — nooit committen (staat in `.gitignore`).
 
 ## Bekende technical debt
