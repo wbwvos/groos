@@ -4,3 +4,4 @@ dist/
 .picnic-session
 .worktrees/
 data/
+api-output/
