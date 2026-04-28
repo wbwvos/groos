@@ -11,7 +11,7 @@ Een MCP server voor [Picnic.nl](https://picnic.nl) waarmee Claude Code je weekbo
 ## Installatie
 
 ```bash
-git clone https://github.com/sledder/groos
+git clone https://github.com/wbwvos/groos
 cd groos
 npm install
 cp .env.example .env
@@ -60,9 +60,20 @@ Start daarna een nieuw Claude Code gesprek. Je kunt nu zeggen:
 Claude heeft toegang tot deze tools:
 
 - **Zoeken & mandje:** `search_product`, `add_to_basket`, `remove_from_basket`, `clear_basket`, `get_basket`
-- **Weekplanning:** `get_weekly_plan`, `get_weekly_recipes`, `add_recipe_to_basket`
+- **Weekplanning:** `get_weekly_plan`, `manage_staples`
+- **Recepten:** `get_weekly_recipes`, `search_recipe`, `add_recipe_to_basket`
 - **Bezorging:** `get_delivery_slots`, `set_delivery_slot`
 - **Bestelling:** `check_order_eligibility`, `confirm_order` ⚠️
+
+### Receptcatalogus
+
+`search_recipe` zoekt in een lokale cache van Picnic-recepten (naam, categorie). Vul of ververs hem met:
+
+```bash
+npm run update-recipes
+```
+
+`get_weekly_plan` ververst de catalogus automatisch als hij ouder is dan een week.
 
 ## Node.js op WSL
 
@@ -77,7 +88,7 @@ nvm install 22 && nvm use 22
 ## Bekende beperkingen
 
 - Receptparsing is gebaseerd op Picnic's interne app-structuur en kan breken bij een Picnic-update.
-- Alleen de ~10 uitgelichte recepten van de Picnic homepage zijn beschikbaar.
+- `confirm_order` werkt momenteel niet via automatisch incasso — Picnic vereist eerst een iDEAL checkout-stap. Zie `CLAUDE.md` voor details.
 
 ## Licentie
 
