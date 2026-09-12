@@ -7,8 +7,8 @@
  * Usage: npm run update-recipes
  */
 
-import { createPicnicService } from '../src/picnic.ts'
-import { loadCatalog, saveCatalog } from '../src/catalog.ts'
+import { createPicnicService } from '../src/picnic.js'
+import { loadCatalog, saveCatalog } from '../src/catalog.js'
 
 const picnic = createPicnicService()
 

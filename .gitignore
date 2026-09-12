@@ -8,3 +8,7 @@ api-output/
 TASKS.md
 .claude/
 .remember/
+
+# User config lives in ~/.config/groos; only templates belong here
+config/*.yaml
+!config/*.example.yaml

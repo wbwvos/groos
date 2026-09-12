@@ -49,11 +49,19 @@ Start daarna een nieuw Claude Code gesprek. Je kunt nu zeggen:
 
 ## Configuratie aanpassen
 
+Je eigen instellingen staan in `~/.config/groos/`, buiten deze repo. Bij de
+eerste start worden ze gekopieerd vanuit de templates in `config/`, dus je hoeft
+niks handmatig aan te maken. Zet `GROOS_CONFIG_DIR` om een andere map te
+gebruiken.
+
 | Bestand | Inhoud |
 |---------|--------|
-| `config/staples.yaml` | Vaste wekelijkse producten met aantallen |
-| `config/meals.yaml` | Bekende maaltijden (als inspiratie voor Claude) |
-| `config/household.yaml` | Gezinssamenstelling (voor hoeveelheidscheck) |
+| `~/.config/groos/staples.yaml` | Vaste wekelijkse producten met aantallen |
+| `~/.config/groos/meals.yaml` | Bekende maaltijden (als inspiratie voor Claude) |
+| `~/.config/groos/household.yaml` | Gezinssamenstelling (voor hoeveelheidscheck) |
+
+`manage_staples` schrijft naar `staples.yaml`, dus die verandert tijdens gebruik.
+De meegeleverde `config/*.example.yaml` blijven ongemoeid.
 
 ## Beschikbare tools
 
@@ -74,6 +82,17 @@ npm run update-recipes
 ```
 
 `get_weekly_plan` ververst de catalogus automatisch als hij ouder is dan een week.
+
+### Zonder Claude proberen
+
+`npm run flow` draait dezelfde stappen vanaf de opdrachtregel, handig om te zien
+wat de tools zouden doen:
+
+```bash
+npm run flow -- staples              # zoek je vaste boodschappen op
+npm run flow -- recipes              # toon de weekrecepten
+npm run flow -- add-recipe <id> 4    # zet een recept in je mandje
+```
 
 ## Node.js op WSL
 

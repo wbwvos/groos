@@ -392,7 +392,7 @@ mcp.addTool({
 
 mcp.addTool({
   name: 'manage_staples',
-  description: 'Voeg, verwijder of wijzig vaste wekelijkse boodschappen. Wijzigingen worden opgeslagen in config/staples.yaml.',
+  description: 'Voeg, verwijder of wijzig vaste wekelijkse boodschappen. Wijzigingen worden opgeslagen in staples.yaml in de gebruikersconfig (~/.config/groos).',
   parameters: z.object({
     action: z.enum(['add', 'remove', 'set_quantity']).describe('Actie: add (toevoegen), remove (verwijderen), set_quantity (aantal wijzigen)'),
     name: z.string().describe('Naam van het product, bijv. "havermelk"'),

@@ -9,6 +9,7 @@
   },
   "scripts": {
     "cli": "tsx src/cli.ts",
+    "flow": "tsx scripts/run-flow.ts",
     "mcp": "tsx src/mcp.ts",
     "update-recipes": "tsx scripts/update-recipes.ts",
     "explore": "tsx src/explore-api.ts",

@@ -1,5 +1,52 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { loadStaples, loadMeals, parseStapleString, saveStaples } from './config.js'
+import { describe, it, expect, beforeEach, afterEach, beforeAll, afterAll } from 'vitest'
+import { mkdtempSync, rmSync, existsSync } from 'fs'
+import { tmpdir } from 'os'
+import { join } from 'path'
+import { loadStaples, loadMeals, loadHousehold, parseStapleString, saveStaples, userConfigDir } from './config.js'
+
+// Point config at a throwaway directory so the suite never reads or overwrites
+// the real user config, which manage_staples also writes to.
+let tempConfigDir: string
+
+beforeAll(() => {
+  tempConfigDir = mkdtempSync(join(tmpdir(), 'groos-config-'))
+  process.env.GROOS_CONFIG_DIR = tempConfigDir
+})
+
+afterAll(() => {
+  rmSync(tempConfigDir, { recursive: true, force: true })
+  delete process.env.GROOS_CONFIG_DIR
+})
+
+describe('userConfigDir', () => {
+  it('honours GROOS_CONFIG_DIR', () => {
+    expect(userConfigDir()).toBe(tempConfigDir)
+  })
+})
+
+describe('seeding from templates', () => {
+  it('creates staples.yaml from the shipped template on first read', async () => {
+    const target = join(tempConfigDir, 'staples.yaml')
+    rmSync(target, { force: true })
+    expect(existsSync(target)).toBe(false)
+    const staples = await loadStaples()
+    expect(existsSync(target)).toBe(true)
+    expect(staples.length).toBeGreaterThan(0)
+  })
+
+  it('seeds meals and household too', async () => {
+    await loadMeals()
+    await loadHousehold()
+    expect(existsSync(join(tempConfigDir, 'meals.yaml'))).toBe(true)
+    expect(existsSync(join(tempConfigDir, 'household.yaml'))).toBe(true)
+  })
+
+  it('does not overwrite a file that already exists', async () => {
+    await saveStaples([{ name: 'eigen keuze', quantity: 7 }])
+    const reloaded = await loadStaples()
+    expect(reloaded).toEqual([{ name: 'eigen keuze', quantity: 7 }])
+  })
+})
 
 describe('loadStaples', () => {
   it('returns an array of staple items', async () => {
