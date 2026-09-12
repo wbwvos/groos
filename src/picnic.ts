@@ -18,6 +18,27 @@ function saveAuthKey(key: string) {
   writeFileSync(SESSION_FILE, key, 'utf8')
 }
 
+/**
+ * Picnic rejects /cart and /pages calls that arrive without the x-picnic-agent
+ * client-version header: "Client version is required to preview the cart page."
+ * picnic-api only sends that header for /pages, so force it on every request
+ * here rather than per call site.
+ */
+function createClient(countryCode: 'NL' | 'DE', authKey?: string): InstanceType<typeof PicnicClient> {
+  const client = new PicnicClient(authKey ? { authKey, countryCode } : { countryCode })
+  const sendRequest = client.sendRequest.bind(client)
+  client.sendRequest = function <TRequestData, TResponseData>(
+    method: 'GET' | 'POST' | 'PUT' | 'DELETE',
+    path: string,
+    data: TRequestData | null = null,
+    _includePicnicHeaders?: boolean,
+    isImageRequest?: boolean,
+  ): Promise<TResponseData> {
+    return sendRequest<TRequestData, TResponseData>(method, path, data, true, isImageRequest)
+  }
+  return client
+}
+
 export interface Product {
   id: string
   name: string
@@ -50,14 +71,37 @@ export interface Recipe {
   ingredients: RecipeIngredient[]
 }
 
+/** Find the title: the single RICH_TEXT node marked HEADLINE1. */
+function findHeadline(obj: any): string | null {
+  if (!obj || typeof obj !== 'object') return null
+  if (obj.textType === 'HEADLINE1' && typeof obj.markdown === 'string' && obj.markdown.trim()) {
+    return obj.markdown.trim()
+  }
+  for (const v of Object.values(obj)) {
+    const found = findHeadline(v)
+    if (found) return found
+  }
+  return null
+}
+
+/** Last resort when the page has no HEADLINE1: first plausible markdown string. */
+function fallbackName(pageJson: string): string | null {
+  const candidates = [...pageJson.matchAll(/"markdown"\s*:\s*"([^"]{8,})"/g)]
+    .map(m => m[1].replace(/\\n/g, ' ').trim())
+  return candidates.find(s =>
+    !s.startsWith('http') && !s.includes('\\') && s.length < 100 && /\s/.test(s)
+  ) ?? null
+}
+
 export class PicnicService {
   private client: InstanceType<typeof PicnicClient>
   private username: string
   private password: string
+  private countryCode: 'NL' | 'DE'
 
   constructor(username: string, password: string, countryCode: 'NL' | 'DE' = 'NL') {
-    const savedKey = loadAuthKey()
-    this.client = new PicnicClient(savedKey ? { authKey: savedKey, countryCode } : { countryCode })
+    this.countryCode = countryCode
+    this.client = createClient(countryCode, loadAuthKey())
     this.username = username
     this.password = password
   }
@@ -71,7 +115,7 @@ export class PicnicService {
       } catch {
         // Session expired — delete and re-login
         saveAuthKey('')
-        this.client = new PicnicClient()
+        this.client = createClient(this.countryCode)
       }
     }
     const result = await this.client.auth.login(this.username, this.password)
@@ -331,10 +375,10 @@ export class PicnicService {
     const page: any = await this.client.app.getPage(`selling-group-details-page?selling_group_id=${id}`)
     const pageJson = JSON.stringify(page)
 
-    // Recipe name: first long markdown string (>20 chars, not a URL, ≥4 words)
-    const markdownMatches = pageJson.matchAll(/"markdown"\s*:\s*"([^"]{20,})"/g)
-    const markdownStrings = [...markdownMatches].map(m => m[1].replace(/\\n/g, ' ').trim())
-    const name = markdownStrings.find(s => !s.startsWith('http') && !s.includes('\\') && s.length < 100 && s.split(/\s+/).length >= 4) ?? id
+    // Recipe name: the page carries exactly one HEADLINE1 rich-text node, and that
+    // is the title. Falling back to "first longish markdown string" picks up the
+    // tagline or the description instead, so only use it when the headline is gone.
+    const name = findHeadline(page) ?? fallbackName(pageJson) ?? id
 
     // Cooking time: first "X min" pattern
     const timeMatch = pageJson.match(/"(\d+ min)"/)
